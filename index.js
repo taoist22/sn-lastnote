@@ -1,4 +1,4 @@
-import {AppRegistry, Image, NativeModules, ToastAndroid} from 'react-native';
+import {AppRegistry, Image, NativeModules} from 'react-native';
 import App from './App';
 import {name as appName} from './app.json';
 import {PluginManager, PluginCommAPI} from 'sn-plugin-lib';
@@ -28,14 +28,14 @@ PluginManager.registerButtonListener({
     try {
       const currentRes = await PluginCommAPI.getCurrentFilePath();
       if (!currentRes || !currentRes.success || !currentRes.result) {
-        ToastAndroid.show('Could not resolve current file path.', ToastAndroid.SHORT);
+        console.warn('LastNote: Could not resolve current file path.');
         return;
       }
       const currentPath = currentRes.result;
 
       const lastNoteModule = NativeModules.LastNote;
       if (!lastNoteModule) {
-        ToastAndroid.show('LastNote native module is not registered.', ToastAndroid.LONG);
+        console.error('LastNote native module is not registered.');
         return;
       }
 
@@ -52,17 +52,15 @@ PluginManager.registerButtonListener({
         } else if (lastPath.toLowerCase().endsWith('.pdf') || lastPath.toLowerCase().endsWith('.epub')) {
           await lastNoteModule.openDocument(lastPath);
         } else {
-          ToastAndroid.show('Unsupported file type: ' + lastPath, ToastAndroid.SHORT);
+          console.warn('LastNote: Unsupported file type: ' + lastPath);
           return;
         }
-        ToastAndroid.show('Switched note', ToastAndroid.SHORT);
       } else {
         // Save current note path to storage as initial target
         await lastNoteModule.writeLastPath(currentPath);
-        ToastAndroid.show('Target saved. Open another note to switch.', ToastAndroid.LONG);
       }
     } catch (error) {
-      ToastAndroid.show('LastNote toggle failed: ' + (error?.message ?? error), ToastAndroid.LONG);
+      console.error('LastNote toggle failed:', error);
     }
   },
 });

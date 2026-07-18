@@ -25,7 +25,7 @@ LastNote is a native-backed background plugin for Supernote devices. It allows y
 
 ### First-Time Setup
 1. Open **Note A** (your first note).
-2. Tap the **LastNote icon** (two arrows) on the toolbar. A Toast notification will appear: `"Target saved. Open another note to switch."`
+2. Tap the **LastNote icon** (two arrows) on the toolbar to register Note A as the toggle target.
 3. Manually open **Note B** (your second note or document) via the Recents list, Files menu, or Sidebar.
 
 ### Ongoing Toggling
