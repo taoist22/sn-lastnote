@@ -1,0 +1,11 @@
+{
+  "name": "LastNote",
+  "desc": "1-Tap toggle back to your last viewed note.",
+  "author": "CT Reatherford",
+  "iconPath": "assets/two-arrows.png",
+  "versionName": "0.1.0",
+  "versionCode": "1",
+  "pluginID": "vlg9-4sgbngei7gj",
+  "pluginKey": "LastNote",
+  "jsMainPath": "index"
+}
