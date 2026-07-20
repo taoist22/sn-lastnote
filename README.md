@@ -1,6 +1,6 @@
 # LastNote
 
-LastNote is a native-backed background plugin for Supernote devices. It allows you to toggle back and forth between two notes (or documents) with exactly **one tap** directly from your note toolbar.
+LastNote is a native-backed background plugin for Supernote devices. It allows you to toggle back and forth between two notes with  **two tap** directly from your note toolbar.
 
 ---
 
