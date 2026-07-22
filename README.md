@@ -29,10 +29,13 @@ LastNote is a native-backed background plugin for Supernote devices. It allows y
 3. Manually open **Note B** (your second note or document) via the Recents list, Files menu, or Sidebar.
 
 ### Ongoing Toggling
-- While in **Note B**, tap the **LastNote icon** to switch instantly back to **Note A** (Note B is automatically saved as the next target).
-- While in **Note A**, tap the **LastNote icon** to switch instantly back to **Note B**.
+- **Toolbar Button**: Tap the LastNote icon on the toolbar to switch instantly.
+- **Floating Page Button**: Tapping the toolbar icon also launches a small, circular **Floating Button** directly on your screen canvas.
+  - **Drag & Position**: Drag the floating button anywhere on your screen (e.g. lower corner or margin). Its position is automatically saved.
+  - **1-Tap Page Switch**: Tap the floating button on the page surface to instantly toggle between Note A and Note B without needing to reach for the toolbar.
+  - **Dismiss**: Long-press (hold 1 second) on the floating button to hide it from your screen.
 
-You can repeat this back and forth indefinitely. Each switch takes a single tap on the toolbar.
+You can repeat this back and forth indefinitely.
 
 ---
 

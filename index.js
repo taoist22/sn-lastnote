@@ -27,11 +27,7 @@ PluginManager.registerButtonListener({
 
     try {
       const currentRes = await PluginCommAPI.getCurrentFilePath();
-      if (!currentRes || !currentRes.success || !currentRes.result) {
-        console.warn('LastNote: Could not resolve current file path.');
-        return;
-      }
-      const currentPath = currentRes.result;
+      const currentPath = currentRes?.result;
 
       const lastNoteModule = NativeModules.LastNote;
       if (!lastNoteModule) {
@@ -39,10 +35,15 @@ PluginManager.registerButtonListener({
         return;
       }
 
+      // Show/ensure the floating page button is visible on screen
+      if (typeof lastNoteModule.showFloatingButton === 'function') {
+        lastNoteModule.showFloatingButton().catch(() => null);
+      }
+
       // Read previously saved note path
       const lastPath = await lastNoteModule.readLastPath();
 
-      if (lastPath && lastPath !== currentPath) {
+      if (currentPath && lastPath && lastPath !== currentPath) {
         // Save current note path to storage first
         await lastNoteModule.writeLastPath(currentPath);
 
@@ -55,7 +56,7 @@ PluginManager.registerButtonListener({
           console.warn('LastNote: Unsupported file type: ' + lastPath);
           return;
         }
-      } else {
+      } else if (currentPath) {
         // Save current note path to storage as initial target
         await lastNoteModule.writeLastPath(currentPath);
       }
