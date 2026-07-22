@@ -1,6 +1,6 @@
 # LastNote
 
-LastNote is a native-backed background plugin for Supernote devices. It allows you to toggle back and forth between two notes with  **two tap** directly from your note toolbar.
+LastNote is a native-backed background plugin for Supernote devices. It allows you to toggle back and forth between two notes (or documents) with **exactly 1 tap** directly from your note toolbar.
 
 ---
 
@@ -23,19 +23,52 @@ LastNote is a native-backed background plugin for Supernote devices. It allows y
 
 ## Usage Instructions
 
-### First-Time Setup
-1. Open **Note A** (your first note).
-2. Tap the **LastNote icon** (two arrows) on the toolbar to register Note A as the toggle target.
-3. Manually open **Note B** (your second note or document) via the Recents list, Files menu, or Sidebar.
+### Part 1: Pairing Your First Two Notes (Note A & Note B)
 
-### Ongoing Toggling
-- **Toolbar Button**: Tap the LastNote icon on the toolbar to switch instantly.
-- **Floating Page Button**: Tapping the toolbar icon also launches a small, circular **Floating Button** directly on your screen canvas.
-  - **Drag & Position**: Drag the floating button anywhere on your screen (e.g. lower corner or margin). Its position is automatically saved.
-  - **1-Tap Page Switch**: Tap the floating button on the page surface to instantly toggle between Note A and Note B without needing to reach for the toolbar.
-  - **Dismiss**: Long-press (hold 1 second) on the floating button to hide it from your screen.
+#### Step 1: Initialize Note A
+1. Open **Note A**.
+2. Tap the **LastNote icon** (two arrows) on the toolbar. *(The plugin saves Note A as your starting point).*
 
-You can repeat this back and forth indefinitely.
+#### Step 2: Connect Note B
+1. Manually open **Note B** (using your swipe-down Recents list, Files menu, or Sidebar).
+2. Tap the **LastNote icon** on the toolbar. *(The plugin saves Note B as the return target and immediately jumps you back to Note A).*
+
+#### Step 3: Toggle Back & Forth
+- You are in **Note A**: Tap **LastNote** → Instantly opens **Note B**.
+- You are in **Note B**: Tap **LastNote** → Instantly opens **Note A**.
+
+---
+
+### Part 2: Switching to a NEW Pair of Notes (Note C & Note D)
+
+When you finish working with Note A & Note B and want to switch to a **new pair of notes** (Note C & Note D):
+
+#### Step 1: Open Note C
+- Manually open **Note C** (via Recents, Files, or Sidebar).
+
+#### Step 2: Register Note C as the New Target
+- Tap the **LastNote icon** once. *(The plugin jumps back to your old note once—and registers **Note C** as your new starting target).*
+
+#### Step 3: Open Note D & Lock in the New Pair
+- Manually open **Note D** (via Recents, Files, or Sidebar).
+- Tap the **LastNote icon** once. *(The plugin sees Note C in memory, saves Note D as the return target, and jumps you back to **Note C**).*
+
+#### Step 4: Toggle Your New Pair
+- You are in **Note C**: Tap **LastNote** → Instantly opens **Note D**.
+- You are in **Note D**: Tap **LastNote** → Instantly opens **Note C**.
+
+Your old pairing is automatically overwritten, and your new pair (**Note C & Note D**) is now active!
+
+---
+
+### Part 3: Working with Documents (PDF / EPUB)
+
+Supernote's native Note Editor (`.note`) displays the **LastNote** icon directly on the main toolbar. Supernote's Document Reader (`.pdf` / `.epub`) organizes plugin icons inside its overflow menu:
+
+When in a PDF or EPUB document:
+1. Tap the **Three Dots (...)** on the top menu bar.
+2. Select **Plugins**.
+3. Tap **LastNote** to execute the switch.
 
 ---
 

@@ -35,11 +35,6 @@ PluginManager.registerButtonListener({
         return;
       }
 
-      // Show/ensure the floating page button is visible on screen
-      if (typeof lastNoteModule.showFloatingButton === 'function') {
-        lastNoteModule.showFloatingButton().catch(() => null);
-      }
-
       // Read previously saved note path
       const lastPath = await lastNoteModule.readLastPath();
 
@@ -54,7 +49,6 @@ PluginManager.registerButtonListener({
           await lastNoteModule.openDocument(lastPath);
         } else {
           console.warn('LastNote: Unsupported file type: ' + lastPath);
-          return;
         }
       } else if (currentPath) {
         // Save current note path to storage as initial target
