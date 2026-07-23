@@ -1,5 +1,6 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
+  DeviceEventEmitter,
   FlatList,
   NativeModules,
   SafeAreaView,
@@ -9,9 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {PluginCommAPI, PluginManager} from 'sn-plugin-lib';
+import {PluginManager} from 'sn-plugin-lib';
 
-// Root entries shown before the user drills into a folder
 const ROOTS = [
   {name: 'Notes', path: '/storage/emulated/0/Note', isDir: true},
   {name: 'Documents', path: '/storage/emulated/0/Document', isDir: true},
@@ -24,23 +24,39 @@ interface DirItem {
 }
 
 export default function App(): React.JSX.Element {
-  const [items, setItems]             = useState<DirItem[]>(ROOTS);
-  const [loading, setLoading]         = useState(false);
-  const [currentPath, setCurrentPath] = useState('');  // note we're pairing WITH
-  const [dirStack, setDirStack]       = useState<string[]>([]);  // breadcrumb stack
+  const [items, setItems]         = useState<DirItem[]>(ROOTS);
+  const [loading, setLoading]     = useState(false);
+  const [dirStack, setDirStack]   = useState<string[]>([]);
+  const [noteA, setNoteA]         = useState<string | null>(null);
+  const [noteB, setNoteB]         = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'A' | 'B'>('B');
 
-  // openCount increments each time the view becomes active; drives re-init
-  const openCountRef = useRef(0);
-
-  // Called on every mount — reset to root and reload current note path
-  useEffect(() => {
-    openCountRef.current += 1;
+  const loadCurrentPair = useCallback(async () => {
     setDirStack([]);
     setItems(ROOTS);
-    PluginCommAPI.getCurrentFilePath().then(res => {
-      setCurrentPath((res?.result as string) || '');
-    }).catch(() => {});
-  }, []); // runs once per mount; component remounts each time showPluginView is called
+    try {
+      const [hereVal, thereVal] = await Promise.all([
+        NativeModules.LastNote.readHere(),
+        NativeModules.LastNote.readThere(),
+      ]);
+      setNoteA(hereVal || null);
+      setNoteB(thereVal || null);
+      // If Note A isn't set yet, target A first; otherwise default to targeting B
+      setActiveTab(hereVal ? 'B' : 'A');
+    } catch (e) {
+      setActiveTab('A');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCurrentPair();
+    const sub = DeviceEventEmitter.addListener('onFloatingLongPress', () => {
+      loadCurrentPair();
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [loadCurrentPair]);
 
   const navigateTo = useCallback(async (dirPath: string) => {
     setLoading(true);
@@ -56,12 +72,8 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const goBack = useCallback(async () => {
-    if (dirStack.length === 0) {
-      // Already at root
-      return;
-    }
+    if (dirStack.length === 0) return;
     if (dirStack.length === 1) {
-      // Back to root selector
       setDirStack([]);
       setItems(ROOTS);
       return;
@@ -81,28 +93,51 @@ export default function App(): React.JSX.Element {
   }, [dirStack]);
 
   const handleSelectFile = useCallback(async (item: DirItem) => {
-    if (!item.path || item.path === currentPath) return;
-    try {
-      await NativeModules.LastNote.writePair(currentPath, item.path);
-    } catch (e) {
-      console.error('LastNote: writePair failed', e);
+    if (activeTab === 'A') {
+      const newA = item.path;
+      setNoteA(newA);
+      if (!noteB) {
+        // If Note B isn't set yet, automatically switch active tab to B
+        setActiveTab('B');
+        setDirStack([]);
+        setItems(ROOTS);
+      } else {
+        // Note B is already set -> save new pair and close
+        if (newA === noteB) return;
+        try {
+          await NativeModules.LastNote.writePair(newA, noteB);
+        } catch (e) {
+          console.error('LastNote: writePair failed', e);
+        }
+        PluginManager.closePluginView();
+      }
+    } else {
+      // activeTab === 'B'
+      const newB = item.path;
+      const targetA = noteA || item.path;
+      if (targetA === newB && noteA) return;
+      try {
+        await NativeModules.LastNote.writePair(targetA, newB);
+      } catch (e) {
+        console.error('LastNote: writePair failed', e);
+      }
+      PluginManager.closePluginView();
     }
-    // Close immediately — no intermediate state, prevents stuck-screen on reopen
-    PluginManager.closePluginView();
-  }, [currentPath]);
+  }, [activeTab, noteA, noteB]);
 
   const handleCancel = useCallback(() => {
     PluginManager.closePluginView();
   }, []);
 
   const atRoot = dirStack.length === 0;
-  const currentDirName = atRoot
-    ? 'Choose Note or Document'
-    : dirStack[dirStack.length - 1].split('/').pop() || '';
-  const currentNoteName = currentPath.split('/').pop() || '—';
+  const noteAName = noteA ? noteA.split('/').pop() : 'Select Note A';
+  const noteBName = noteB ? noteB.split('/').pop() : 'Select Note B';
 
   const renderItem = ({item}: {item: DirItem}) => {
-    const isCurrent = item.path === currentPath;
+    const isNoteA = item.path === noteA;
+    const isNoteB = item.path === noteB;
+    const isSelected = activeTab === 'A' ? isNoteA : isNoteB;
+
     if (item.isDir) {
       return (
         <TouchableOpacity style={styles.item} onPress={() => navigateTo(item.path)}>
@@ -118,18 +153,17 @@ export default function App(): React.JSX.Element {
     const icon = ext.endsWith('.note') ? '📓' : '📄';
     return (
       <TouchableOpacity
-        style={[styles.item, isCurrent && styles.itemDimmed]}
-        onPress={() => !isCurrent && handleSelectFile(item)}
-        disabled={isCurrent}>
+        style={[styles.item, isSelected && styles.itemDimmed]}
+        onPress={() => !isSelected && handleSelectFile(item)}
+        disabled={isSelected}>
         <View style={styles.itemRow}>
           <Text style={styles.fileIcon}>{icon}</Text>
           <View style={styles.fileInfo}>
-            <Text style={[styles.fileName, isCurrent && styles.dimText]}>
+            <Text style={[styles.fileName, isSelected && styles.dimText]}>
               {item.name}
             </Text>
-            {isCurrent && (
-              <Text style={styles.currentTag}>current note</Text>
-            )}
+            {isNoteA && <Text style={styles.tagText}>Note A</Text>}
+            {isNoteB && <Text style={styles.tagText}>Note B</Text>}
           </View>
         </View>
       </TouchableOpacity>
@@ -143,20 +177,48 @@ export default function App(): React.JSX.Element {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          {!atRoot && (
+          {!atRoot ? (
             <TouchableOpacity style={styles.backBtn} onPress={goBack}>
               <Text style={styles.backText}>‹ Back</Text>
             </TouchableOpacity>
+          ) : (
+            <View style={{width: 50}} />
           )}
           <Text style={styles.title} numberOfLines={1}>
-            {currentDirName}
+            Pair Configuration
           </Text>
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.subtitle}>
-          Pairing with: <Text style={styles.bold}>{currentNoteName}</Text>
+
+        {/* Note A / Note B Selector Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabBox, activeTab === 'A' && styles.activeTabBox]}
+            onPress={() => setActiveTab('A')}>
+            <Text style={styles.tabLabel}>NOTE A</Text>
+            <Text style={styles.tabVal} numberOfLines={1}>
+              {noteAName}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.swapIcon}>⇄</Text>
+
+          <TouchableOpacity
+            style={[styles.tabBox, activeTab === 'B' && styles.activeTabBox]}
+            onPress={() => setActiveTab('B')}>
+            <Text style={styles.tabLabel}>NOTE B</Text>
+            <Text style={styles.tabVal} numberOfLines={1}>
+              {noteBName}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.hint}>
+          {activeTab === 'A'
+            ? 'Tap a file below to replace Note A'
+            : 'Tap a file below to replace Note B'}
         </Text>
       </View>
 
@@ -166,7 +228,7 @@ export default function App(): React.JSX.Element {
         </View>
       ) : items.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.body}>No notes or folders here.</Text>
+          <Text style={styles.body}>No files or folders found.</Text>
         </View>
       ) : (
         <FlatList
@@ -181,32 +243,37 @@ export default function App(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  root:       {flex: 1, backgroundColor: '#fff'},
-  header:     {paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
-               borderBottomWidth: 2, borderBottomColor: '#111'},
-  headerRow:  {flexDirection: 'row', alignItems: 'center',
-               justifyContent: 'space-between', marginBottom: 8},
-  backBtn:    {paddingRight: 10},
-  backText:   {fontSize: 18, color: '#333', fontWeight: '600'},
-  title:      {flex: 1, fontSize: 20, fontWeight: '800', color: '#000',
-               textAlign: 'center', marginHorizontal: 4},
-  cancelBtn:  {paddingHorizontal: 10, paddingVertical: 5,
-               borderWidth: 1, borderColor: '#666', borderRadius: 4},
-  cancelText: {fontSize: 14, color: '#333'},
-  subtitle:   {fontSize: 14, color: '#555'},
-  bold:       {fontWeight: '700', color: '#000'},
-  center:     {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  body:       {fontSize: 16, color: '#777'},
-  sep:        {height: 1, backgroundColor: '#e8e8e8'},
-  item:       {paddingVertical: 16, paddingHorizontal: 20, backgroundColor: '#fff'},
-  itemDimmed: {backgroundColor: '#f5f5f5'},
-  itemRow:    {flexDirection: 'row', alignItems: 'center'},
-  folderIcon: {fontSize: 22, marginRight: 12},
-  folderName: {flex: 1, fontSize: 18, fontWeight: '600', color: '#000'},
-  chevron:    {fontSize: 22, color: '#aaa', fontWeight: '300'},
-  fileIcon:   {fontSize: 22, marginRight: 12},
-  fileInfo:   {flex: 1},
-  fileName:   {fontSize: 17, fontWeight: '500', color: '#000'},
-  dimText:    {color: '#bbb'},
-  currentTag: {fontSize: 12, color: '#888', marginTop: 2},
+  root:        {flex: 1, backgroundColor: '#fff'},
+  header:      {paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
+                borderBottomWidth: 2, borderBottomColor: '#111'},
+  headerRow:   {flexDirection: 'row', alignItems: 'center',
+                justifyContent: 'space-between', marginBottom: 12},
+  backBtn:     {paddingRight: 10},
+  backText:    {fontSize: 18, color: '#333', fontWeight: '600'},
+  title:       {flex: 1, fontSize: 20, fontWeight: '800', color: '#000', textAlign: 'center'},
+  cancelBtn:   {paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#666', borderRadius: 4},
+  cancelText:  {fontSize: 14, color: '#333'},
+
+  tabContainer:{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8},
+  tabBox:      {flex: 1, borderWidth: 1.5, borderColor: '#ccc', borderRadius: 6, padding: 8, backgroundColor: '#f9f9f9'},
+  activeTabBox:{borderColor: '#000', backgroundColor: '#eef3ff'},
+  tabLabel:    {fontSize: 11, fontWeight: '800', color: '#555', marginBottom: 2},
+  tabVal:      {fontSize: 14, fontWeight: '600', color: '#000'},
+  swapIcon:    {fontSize: 20, marginHorizontal: 8, color: '#444'},
+
+  hint:        {fontSize: 13, color: '#666', textAlign: 'center', marginTop: 4},
+  center:      {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  body:        {fontSize: 16, color: '#777'},
+  sep:         {height: 1, backgroundColor: '#e8e8e8'},
+  item:        {paddingVertical: 16, paddingHorizontal: 20, backgroundColor: '#fff'},
+  itemDimmed:  {backgroundColor: '#f5f5f5'},
+  itemRow:     {flexDirection: 'row', alignItems: 'center'},
+  folderIcon:  {fontSize: 22, marginRight: 12},
+  folderName:  {flex: 1, fontSize: 18, fontWeight: '600', color: '#000'},
+  chevron:     {fontSize: 22, color: '#aaa', fontWeight: '300'},
+  fileIcon:    {fontSize: 22, marginRight: 12},
+  fileInfo:    {flex: 1},
+  fileName:    {fontSize: 17, fontWeight: '500', color: '#000'},
+  dimText:     {color: '#bbb'},
+  tagText:     {fontSize: 12, color: '#0066cc', fontWeight: '700', marginTop: 2},
 });

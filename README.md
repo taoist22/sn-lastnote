@@ -8,7 +8,8 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 
 - **1-Tap Toggling**: Instantly jump between your active note and a paired note or document.
 - **Floating Overlay Icon**: Placed on screen for effortless single-tap return without digging into sub-menus on PDF/EPUB documents.
-- **Visual Folder Navigator**: Easily choose your target note or document by navigating through your device's `Notes` and `Documents` directory hierarchy.
+- **Pair Configuration UI**: Tabbed selector lets you easily replace Note A or Note B individually with 1 tap.
+- **Visual Folder Navigator**: Choose target notes or documents by navigating through your device's `Notes` and `Documents` directory hierarchy.
 - **Clean State Management**: Turns off instantly when toggled via the toolbar button.
 - **Multi-Format Support**: Switches seamlessly between `.note` notebooks, PDF documents, and EPUB files.
 
@@ -37,17 +38,16 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 ---
 
 ### 3. Pairing Notes & Documents
-1. Open the first note or document on your Supernote.
-2. Ensure the floating toggle icon is visible on screen (activate via toolbar if needed).
-3. **Long-press** the floating icon with your finger (for ~0.6 seconds). A folder browser will appear showing your `Notes` and `Documents` folders.
-4. Navigate to and tap the second note or document you wish to pair with.
-5. The view closes automatically and your note pairing is saved!
+1. **Long-press** the floating icon with your finger (for ~0.6 seconds). The **Pair Configuration** screen opens.
+2. At the top of the screen, you will see your current pair: `[ NOTE A: ... ]` and `[ NOTE B: ... ]`.
+3. **To update Note B (default)**: Simply navigate the folder browser below and tap any file. It updates Note B, saves the pair, and closes automatically (**1 tap**).
+4. **To update Note A**: Tap the `[ NOTE A ]` tab at the top first, then navigate and tap any file below to update Note A.
 
 ---
 
 ### 4. Toggling Back & Forth
-- **Single-tap** the floating icon with your finger anytime to switch back and forth between your paired notes/documents.
-- Works in `.note` files, `.pdf` files, and `.epub` documents.
+- **Single-tap** the floating icon with your finger anytime to switch back and forth between your paired Note A and Note B.
+- Works across `.note` files, `.pdf` files, and `.epub` documents.
 
 ---
 
