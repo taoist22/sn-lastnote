@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
+
 # LastNote
 
 LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes (or documents) with **1 tap**, even while working inside PDF or EPUB documents.
