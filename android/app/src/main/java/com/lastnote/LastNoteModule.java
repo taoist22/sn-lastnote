@@ -222,6 +222,34 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         catch (Exception e) { promise.reject("READ_THERE_FAILED", e); }
     }
 
+    @ReactMethod
+    public void readFavorites(Promise promise) {
+        try { promise.resolve(readFile("ln_favorites.txt")); }
+        catch (Exception e) { promise.reject("READ_FAV_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void writeFavorites(String json, Promise promise) {
+        try {
+            writeFile("ln_favorites.txt", json != null ? json : "[]");
+            promise.resolve(true);
+        } catch (Exception e) { promise.reject("WRITE_FAV_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void readRecentFolders(Promise promise) {
+        try { promise.resolve(readFile("ln_recents.txt")); }
+        catch (Exception e) { promise.reject("READ_RECENTS_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void writeRecentFolders(String json, Promise promise) {
+        try {
+            writeFile("ln_recents.txt", json != null ? json : "[]");
+            promise.resolve(true);
+        } catch (Exception e) { promise.reject("WRITE_RECENTS_FAILED", e); }
+    }
+
     private void writeFile(String name, String content) throws Exception {
         File f = new File(reactContext.getFilesDir(), name);
         FileOutputStream out = new FileOutputStream(f, false);

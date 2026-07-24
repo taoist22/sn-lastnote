@@ -13,7 +13,8 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 - **1-Tap Toggling**: Instantly jump between your active note and a paired note or document.
 - **Floating Overlay Icon**: Placed on screen for effortless single-tap return without digging into sub-menus on PDF/EPUB documents.
 - **Pair Configuration UI**: Tabbed selector lets you easily replace Note A or Note B individually with 1 tap.
-- **Visual Folder Navigator**: Choose target notes or documents by navigating through your device's `Notes` and `Documents` directory hierarchy.
+- **⭐ Favorite Folders & 🕒 Recent Folders**: Star your most important working directories or access your recently used folders directly from the root menu for instant 1-tap navigation.
+- **Optimized E-Ink UI**: High-contrast typography, large black star indicators (`★` / `☆`), and distinct container cards designed specifically for Supernote greyscale screens.
 - **Clean State Management**: Turns off instantly when toggled via the toolbar button.
 - **Multi-Format Support**: Switches seamlessly between `.note` notebooks, PDF documents, and EPUB files.
 
@@ -44,8 +45,11 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 ### 3. Pairing Notes & Documents
 1. **Long-press** the floating icon with your finger (for ~0.6 seconds). The **Pair Configuration** screen opens.
 2. At the top of the screen, you will see your current pair: `[ NOTE A: ... ]` and `[ NOTE B: ... ]`.
-3. **To update Note B (default)**: Simply navigate the folder browser below and tap any file. It updates Note B, saves the pair, and closes automatically (**1 tap**).
-4. **To update Note A**: Tap the `[ NOTE A ]` tab at the top first, then navigate and tap any file below to update Note A.
+3. **Quick Navigation with Favorites & Recents**:
+   - **⭐ Favorite Folders**: Tap `★` next to any folder to star it. Starred folders appear at the top of the root menu for instant access.
+   - **🕒 Recent Folders**: Folders you've recently picked files from automatically appear at the top level.
+4. **To update Note B (default)**: Simply navigate the folder browser and tap any file. It updates Note B, saves the pair, and closes automatically (**1 tap**).
+5. **To update Note A**: Tap the `[ NOTE A ]` tab at the top first, then navigate and tap any file below to update Note A.
 
 ---
 
