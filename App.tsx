@@ -34,6 +34,22 @@ const DEFAULT_ROOTS: DirItem[] = [
   {name: 'IMPORT', path: '/storage/emulated/0/IMPORT', isDir: true},
 ];
 
+function buildBreadcrumbStack(dirPath: string): string[] {
+  const prefix = '/storage/emulated/0';
+  if (!dirPath.startsWith(prefix)) {
+    return [dirPath];
+  }
+  const rel = dirPath.substring(prefix.length);
+  const parts = rel.split('/').filter(Boolean);
+  const stack: string[] = [];
+  let curr = prefix;
+  for (const part of parts) {
+    curr += '/' + part;
+    stack.push(curr);
+  }
+  return stack;
+}
+
 export default function App(): React.JSX.Element {
   const [rootItems, setRootItems]           = useState<DirItem[]>(DEFAULT_ROOTS);
   const [items, setItems]                 = useState<DirItem[]>(DEFAULT_ROOTS);
@@ -163,7 +179,7 @@ export default function App(): React.JSX.Element {
     setLoading(true);
     try {
       const result: DirItem[] = await NativeModules.LastNote.listDirectory(dirPath);
-      setDirStack(prev => [...prev, dirPath]);
+      setDirStack(buildBreadcrumbStack(dirPath));
       setItems(result);
     } catch (e) {
       console.error('LastNote: listDirectory failed', e);
@@ -332,7 +348,7 @@ export default function App(): React.JSX.Element {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          {!atRoot ? (
+          {dirStack.length > 0 ? (
             <TouchableOpacity style={styles.backBtn} onPress={goBack}>
               <Text style={styles.backText}>‹ Back</Text>
             </TouchableOpacity>
@@ -543,32 +559,30 @@ export default function App(): React.JSX.Element {
                 <Text style={styles.sectionBannerText}>FOLDERS</Text>
               </View>
 
-              {/* 🍞 BREADCRUMB NAVIGATION TRAIL (Right above folder items) */}
-              {!atRoot && (
-                <View style={styles.breadcrumbCardBar}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <TouchableOpacity style={styles.crumbBtn} onPress={() => jumpToBreadcrumb(-1)}>
-                      <Text style={styles.crumbText}>🏠 Root</Text>
-                    </TouchableOpacity>
-                    {dirStack.map((p, idx) => {
-                      const segName = p.split('/').pop() || p;
-                      const isLast = idx === dirStack.length - 1;
-                      return (
-                        <View key={p} style={styles.crumbItem}>
-                          <Text style={styles.crumbSep}>›</Text>
-                          <TouchableOpacity
-                            style={[styles.crumbBtn, isLast && styles.crumbBtnActive]}
-                            onPress={() => jumpToBreadcrumb(idx)}>
-                            <Text style={[styles.crumbText, isLast && styles.crumbTextActive]}>
-                              {segName}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
+              {/* 🍞 BREADCRUMB NAVIGATION TRAIL (ALWAYS VISIBLE) */}
+              <View style={styles.breadcrumbCardBar}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <TouchableOpacity style={styles.crumbBtn} onPress={() => jumpToBreadcrumb(-1)}>
+                    <Text style={styles.crumbText}>🏠 Root</Text>
+                  </TouchableOpacity>
+                  {dirStack.map((p, idx) => {
+                    const segName = p.split('/').pop() || p;
+                    const isLast = idx === dirStack.length - 1;
+                    return (
+                      <View key={p} style={styles.crumbItem}>
+                        <Text style={styles.crumbSep}>›</Text>
+                        <TouchableOpacity
+                          style={[styles.crumbBtn, isLast && styles.crumbBtnActive]}
+                          onPress={() => jumpToBreadcrumb(idx)}>
+                          <Text style={[styles.crumbText, isLast && styles.crumbTextActive]}>
+                            {segName}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
               {loading ? (
                 <View style={styles.center}>
