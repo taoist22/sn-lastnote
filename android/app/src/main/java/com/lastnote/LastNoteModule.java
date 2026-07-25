@@ -7,12 +7,15 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
@@ -20,6 +23,8 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
@@ -45,6 +50,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
 
     // Static singleton — survives JS reloads within PluginHost process
     private static View          sFloatingView  = null;
+    private static View          sPopupView     = null;
     private static WindowManager sWindowManager = null;
     private static int           sSavedX        = 80;
     private static int           sSavedY        = 400;
@@ -67,6 +73,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     @Override
     public void onHostDestroy() {
         // Fired when plugin is toggled OFF in Supernote's plugin manager
+        hidePopupInternal();
         hideOverlayInternal();
         reactContext.removeLifecycleEventListener(this);
     }
@@ -87,15 +94,21 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             bg.setColor(Color.argb(220, 115, 115, 115));
             bg.setStroke(2, Color.argb(255, 60, 60, 60));
 
+            DisplayMetrics dm = appCtx.getResources().getDisplayMetrics();
+            float ydpi = dm.ydpi > 0 ? dm.ydpi : (float) dm.densityDpi;
+            int sizePx = Math.round(8.0f * (ydpi / 25.4f));
+            if (sizePx < 50) sizePx = 72; // fallback safety
+            int paddingPx = Math.max(4, Math.round(sizePx * 0.12f));
+
             ImageView btn = new ImageView(appCtx);
             btn.setBackground(bg);
             btn.setImageResource(android.R.drawable.ic_menu_revert);
             btn.setColorFilter(Color.WHITE);
-            btn.setPadding(22, 22, 22, 22);
+            btn.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
             btn.setContentDescription("LastNote toggle");
 
             final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                    130, 130,
+                    sizePx, sizePx,
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -166,6 +179,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     @ReactMethod
     public void hideOverlay(Promise promise) {
         try {
+            hidePopupInternal();
             hideOverlayInternal();
             promise.resolve(true);
         } catch (Exception e) {
@@ -180,9 +194,108 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     }
 
     private void hideOverlayInternal() {
+        hidePopupInternal();
         if (sWindowManager != null && sFloatingView != null) {
             try { sWindowManager.removeView(sFloatingView); } catch (Exception ignored) {}
             sFloatingView = null;
+        }
+    }
+
+    // ─── Native Presets Popup Window ─────────────────────────────────────────
+
+    @ReactMethod
+    public void showPresetPopup(ReadableArray items, Promise promise) {
+        try {
+            hidePopupInternal();
+            Context appCtx = reactContext.getApplicationContext();
+            if (sWindowManager == null) {
+                sWindowManager = (WindowManager) appCtx.getSystemService(Context.WINDOW_SERVICE);
+            }
+
+            DisplayMetrics dm = appCtx.getResources().getDisplayMetrics();
+            float density = dm.density > 0 ? dm.density : 1.5f;
+            int popupWidth = Math.round(280 * density);
+
+            LinearLayout container = new LinearLayout(appCtx);
+            container.setOrientation(LinearLayout.VERTICAL);
+
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(Color.WHITE);
+            bg.setCornerRadius(10 * density);
+            bg.setStroke((int) (2.5f * density), Color.BLACK);
+            container.setBackground(bg);
+            int pPad = (int) (6 * density);
+            container.setPadding(pPad, pPad, pPad, pPad);
+
+            for (int i = 0; i < items.size(); i++) {
+                ReadableMap item = items.getMap(i);
+                final String name = item.hasKey("name") ? item.getString("name") : "Note";
+                final String path = item.hasKey("path") ? item.getString("path") : "";
+                final int page = item.hasKey("page") ? item.getInt("page") : 0;
+
+                TextView tv = new TextView(appCtx);
+                String prefix = path.endsWith(".note") ? "📓 " : "📄 ";
+                String pageSuffix = page > 0 ? " (p." + page + ")" : "";
+                tv.setText(prefix + name + pageSuffix);
+                tv.setTextSize(17);
+                tv.setTextColor(Color.BLACK);
+                int hPad = (int) (14 * density);
+                int vPad = (int) (14 * density);
+                tv.setPadding(hPad, vPad, hPad, vPad);
+
+                // Dividers
+                if (i > 0) {
+                    View line = new View(appCtx);
+                    line.setBackgroundColor(Color.argb(60, 0, 0, 0));
+                    container.addView(line, new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, (int) (1 * density)));
+                }
+
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        hidePopupInternal();
+                        if (path.endsWith(".note")) {
+                            openNoteInternal(path, page);
+                        } else {
+                            openDocumentInternal(path, page);
+                        }
+                    }
+                });
+
+                container.addView(tv);
+            }
+
+            final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    popupWidth,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT
+            );
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = Math.max(20, sSavedX);
+            params.y = Math.max(20, sSavedY + 80);
+
+            sPopupView = container;
+            sWindowManager.addView(sPopupView, params);
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "showPresetPopup failed", e);
+            promise.reject("POPUP_FAILED", e);
+        }
+    }
+
+    @ReactMethod
+    public void hidePopup(Promise promise) {
+        hidePopupInternal();
+        promise.resolve(true);
+    }
+
+    private void hidePopupInternal() {
+        if (sWindowManager != null && sPopupView != null) {
+            try { sWindowManager.removeView(sPopupView); } catch (Exception ignored) {}
+            sPopupView = null;
         }
     }
 
@@ -237,17 +350,45 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     }
 
     @ReactMethod
-    public void readRecentFolders(Promise promise) {
-        try { promise.resolve(readFile("ln_recents.txt")); }
-        catch (Exception e) { promise.reject("READ_RECENTS_FAILED", e); }
+    public void readFavoriteFiles(Promise promise) {
+        try { promise.resolve(readFile("ln_fav_files.txt")); }
+        catch (Exception e) { promise.reject("READ_FAV_FILES_FAILED", e); }
     }
 
     @ReactMethod
-    public void writeRecentFolders(String json, Promise promise) {
+    public void writeFavoriteFiles(String json, Promise promise) {
         try {
-            writeFile("ln_recents.txt", json != null ? json : "[]");
+            writeFile("ln_fav_files.txt", json != null ? json : "[]");
             promise.resolve(true);
-        } catch (Exception e) { promise.reject("WRITE_RECENTS_FAILED", e); }
+        } catch (Exception e) { promise.reject("WRITE_FAV_FILES_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void readPresets(Promise promise) {
+        try { promise.resolve(readFile("ln_presets.txt")); }
+        catch (Exception e) { promise.reject("READ_PRESETS_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void writePresets(String json, Promise promise) {
+        try {
+            writeFile("ln_presets.txt", json != null ? json : "[]");
+            promise.resolve(true);
+        } catch (Exception e) { promise.reject("WRITE_PRESETS_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void readPageLocks(Promise promise) {
+        try { promise.resolve(readFile("ln_pagelocks.txt")); }
+        catch (Exception e) { promise.reject("READ_PAGELOCKS_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void writePageLocks(String json, Promise promise) {
+        try {
+            writeFile("ln_pagelocks.txt", json != null ? json : "{}");
+            promise.resolve(true);
+        } catch (Exception e) { promise.reject("WRITE_PAGELOCKS_FAILED", e); }
     }
 
     private void writeFile(String name, String content) throws Exception {
@@ -255,11 +396,29 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         FileOutputStream out = new FileOutputStream(f, false);
         try { out.write(content.getBytes(StandardCharsets.UTF_8)); out.flush(); }
         finally { out.close(); }
+
+        // External backup copy in MyStyle (survives plugin uninstalls and updates!)
+        try {
+            File backupDir = new File("/storage/emulated/0/MyStyle/LastNote");
+            if (!backupDir.exists()) backupDir.mkdirs();
+            File backupFile = new File(backupDir, name);
+            FileOutputStream bOut = new FileOutputStream(backupFile, false);
+            try { bOut.write(content.getBytes(StandardCharsets.UTF_8)); bOut.flush(); }
+            finally { bOut.close(); }
+        } catch (Exception ignored) {}
     }
 
     private String readFile(String name) throws Exception {
         File f = new File(reactContext.getFilesDir(), name);
-        if (!f.exists()) return null;
+        if (!f.exists() || f.length() == 0) {
+            // Auto-restore from MyStyle backup if internal storage was cleared by uninstall
+            File backupFile = new File("/storage/emulated/0/MyStyle/LastNote", name);
+            if (backupFile.exists() && backupFile.length() > 0) {
+                f = backupFile;
+            } else {
+                return null;
+            }
+        }
         byte[] buf = new byte[(int) f.length()];
         FileInputStream in = new FileInputStream(f);
         try {
@@ -270,6 +429,59 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     }
 
     // ─── Directory listing for folder-navigation file picker ─────────────────
+
+    @ReactMethod
+    public void listRootDirectories(Promise promise) {
+        try {
+            WritableArray result = Arguments.createArray();
+
+            // 1. Explicit known Supernote directories (accessible under Scoped Storage)
+            String[] knownPaths = {
+                "/storage/emulated/0/Note",
+                "/storage/emulated/0/Document",
+                "/storage/emulated/0/MyStyle",
+                "/storage/emulated/0/EXPORT",
+                "/storage/emulated/0/IMPORT",
+                "/storage/emulated/0/INBOX"
+            };
+
+            for (String p : knownPaths) {
+                File f = new File(p);
+                if (f.exists() && f.isDirectory()) {
+                    WritableMap entry = Arguments.createMap();
+                    entry.putString("name", f.getName());
+                    entry.putString("path", f.getAbsolutePath());
+                    entry.putBoolean("isDir", true);
+                    entry.putBoolean("isSdCard", false);
+                    result.pushMap(entry);
+                }
+            }
+
+            // 2. Scan /storage/ for removable SD card volumes
+            File storageDir = new File("/storage");
+            if (storageDir.exists() && storageDir.isDirectory()) {
+                File[] vols = storageDir.listFiles();
+                if (vols != null) {
+                    for (File v : vols) {
+                        String vName = v.getName();
+                        if (v.isDirectory() && !vName.equals("emulated") && !vName.equals("self") && !vName.startsWith(".")) {
+                            WritableMap entry = Arguments.createMap();
+                            entry.putString("name", "💳 SD Card (" + vName + ")");
+                            entry.putString("path", v.getAbsolutePath());
+                            entry.putBoolean("isDir", true);
+                            entry.putBoolean("isSdCard", true);
+                            result.pushMap(entry);
+                        }
+                    }
+                }
+            }
+
+            promise.resolve(result);
+        } catch (Exception e) {
+            Log.e(TAG, "listRootDirectories failed", e);
+            promise.reject("ROOT_LIST_FAILED", e);
+        }
+    }
 
     @ReactMethod
     public void listDirectory(String dirPath, Promise promise) {
@@ -324,42 +536,63 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     // ─── Navigation ──────────────────────────────────────────────────────────
 
     @ReactMethod
-    public void openNote(String filePath, Promise promise) {
+    public void openNoteWithPage(String filePath, int page, Promise promise) {
         try {
-            if (TextUtils.isEmpty(filePath)) {
-                promise.reject("BAD_PATH", "filePath is empty"); return;
-            }
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setComponent(new ComponentName(
-                    "com.ratta.supernote.note",
-                    "com.ratta.supernote.note.view.NoteInsidePagesActivity"));
-            i.putExtra("file_path", filePath);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            reactContext.startActivity(i);
+            openNoteInternal(filePath, page);
             promise.resolve(true);
         } catch (Exception e) {
-            Log.e(TAG, "openNote failed", e);
+            Log.e(TAG, "openNoteWithPage failed", e);
             promise.reject("OPEN_NOTE_FAILED", e);
         }
     }
 
     @ReactMethod
-    public void openDocument(String filePath, Promise promise) {
+    public void openNote(String filePath, Promise promise) {
+        openNoteWithPage(filePath, 0, promise);
+    }
+
+    private void openNoteInternal(String filePath, int page) {
+        if (TextUtils.isEmpty(filePath)) return;
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setComponent(new ComponentName(
+                "com.ratta.supernote.note",
+                "com.ratta.supernote.note.view.NoteInsidePagesActivity"));
+        i.putExtra("file_path", filePath);
+        if (page > 0) {
+            i.putExtra("page", page);
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        reactContext.startActivity(i);
+    }
+
+    @ReactMethod
+    public void openDocumentWithPage(String filePath, int page, Promise promise) {
         try {
-            if (TextUtils.isEmpty(filePath)) {
-                promise.reject("BAD_PATH", "filePath is empty"); return;
-            }
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setComponent(new ComponentName(
-                    "com.supernote.document",
-                    "com.supernote.document.MainActivity"));
-            i.putExtra("file_path", filePath);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            reactContext.startActivity(i);
+            openDocumentInternal(filePath, page);
             promise.resolve(true);
         } catch (Exception e) {
-            Log.e(TAG, "openDocument failed", e);
+            Log.e(TAG, "openDocumentWithPage failed", e);
             promise.reject("OPEN_DOCUMENT_FAILED", e);
         }
+    }
+
+    @ReactMethod
+    public void openDocument(String filePath, Promise promise) {
+        openDocumentWithPage(filePath, 0, promise);
+    }
+
+    private void openDocumentInternal(String filePath, int page) {
+        if (TextUtils.isEmpty(filePath)) return;
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setComponent(new ComponentName(
+                "com.supernote.document",
+                "com.supernote.document.MainActivity"));
+        i.putExtra("file_path", filePath);
+        if (page > 0) {
+            // PDF/EPUB document reader: pass 0-indexed page (UI Page 5 -> intent 4 -> Page 5)
+            i.putExtra("page", page - 1);
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        reactContext.startActivity(i);
     }
 }

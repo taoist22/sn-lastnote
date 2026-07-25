@@ -1,61 +1,79 @@
-
-
 https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
 
-# LastNote
+# LastNote (v0.4.0)
 
-LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes (or documents) with **1 tap**, even while working inside PDF or EPUB documents.
+LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes (or multiple preset documents) with 1 tap, even while working inside PDF or EPUB documents.
 
 ---
 
-## Features
+## Key Features
 
-- **1-Tap Toggling**: Instantly jump between your active note and a paired note or document.
-- **Floating Overlay Icon**: Placed on screen for effortless single-tap return without digging into sub-menus on PDF/EPUB documents.
-- **Pair Configuration UI**: Tabbed selector lets you easily replace Note A or Note B individually with 1 tap.
-- **⭐ Favorite Folders & 🕒 Recent Folders**: Star your most important working directories or access your recently used folders directly from the root menu for instant 1-tap navigation.
-- **Optimized E-Ink UI**: High-contrast typography, large black star indicators (`★` / `☆`), and distinct container cards designed specifically for Supernote greyscale screens.
-- **Clean State Management**: Turns off instantly when toggled via the toolbar button.
+- **Pair & Presets Dashboard**: Manage note pairs and multi-preset document quick-jump targets in a single unified dashboard.
+- **1-Tap Toggling**: Instantly jump between your active note and paired notes or documents.
+- **Page Locking Stepper (`-5` `<` `p.X` `>` `+5`)**: Lock any document to a specific page number. Use `-5`/`+5` or `<`/`>` steppers to set any page number in seconds.
+- **Breadcrumb Navigation Bar**: Interactive path trail (`Root > Note > ProjectA > Specs`) attached directly inside the FOLDERS card lets you jump directly back from deep subfolders in 1 tap.
+- **SD Card & Full Storage Access**: Automatically detects mounted SD cards (`SD Card (...)`) and lists all top-level storage directories (`Notes`, `Documents`, `MyStyle`, `EXPORT`, `IMPORT`, etc.).
+- **Native Quick-Jump Popup (3+ Targets)**: When 3 or more preset targets are active, single-tapping the floating icon opens an instant native E-Ink popup menu right next to the icon for 1-tap jumping.
+- **8mm Line-Height Floating Overlay**: Dynamically calculated for screen DPI (Nomad A6X2 & Manta A5X2) to fit cleanly within standard 8mm ruled lines.
+- **Favorite Files & Folders**: Star your most important notebooks, PDFs, and working directories for instant 1-tap access.
+- **Automatic MyStyle Storage Backup**: Configuration automatically backs up to `/storage/emulated/0/MyStyle/LastNote/`, preserving all your favorites, presets, page-locks, and pairs across plugin uninstalls and updates.
+- **Optimized E-Ink UI**: High-contrast typography, large black star indicators, and bold container cards designed specifically for Supernote greyscale screens.
 - **Multi-Format Support**: Switches seamlessly between `.note` notebooks, PDF documents, and EPUB files.
 
 ---
 
-## Installation
+## Installation & First-Time Setup
 
-1. Download the latest `LastNote.snplg` package from the [Releases](https://github.com/taoist22/sn-lastnote/releases) page.
+### 1. Installation
+1. Download `LastNote.snplg` from the Releases page.
 2. Connect your Supernote to your computer via USB (or use the Partner App/Cloud).
 3. Copy `LastNote.snplg` into the `MyStyle/` folder on your Supernote device's storage.
-4. On your device, go to **Settings** → **Apps** → **Plugins** → **Add Plugin** and select `LastNote`.
+4. On your device, go to **Settings** -> **Apps** -> **Plugins** -> **Add Plugin** and select `LastNote`.
 
 ---
 
-## Usage Instructions
+### 2. First-Time Setup Guide
+Once installed, setting up your first pair takes just a few seconds:
 
-### 1. Activating / Deactivating the Floating Icon
-- **Turn On**: Tap the **LastNote icon** on your note/document toolbar. The floating toggle icon will appear on screen.
-- **Turn Off**: Tap the **LastNote icon** on your toolbar again while active to dismiss the floating icon.
+1. **Activate the Toolbar Button**:
+   - Open any note or document on your Supernote.
+   - Tap the **LastNote icon** on your note/document toolbar. The floating toggle icon will appear on screen.
+
+2. **Position the Floating Overlay**:
+   - Touch and drag the floating circle with your **finger** to place it anywhere on screen (e.g. parked on an empty margin or aligned between two 8mm ruled lines).
+
+3. **Open the Pair & Presets Dashboard**:
+   - **Long-press** the floating icon with your finger (for ~0.6 seconds). The **Pair & Presets Dashboard** window will open.
+
+4. **Select Your Target Documents & SD Cards**:
+   - **From Favorites or Recents**: Star your favorite folders/files or pick from recently opened directories.
+   - **From FOLDERS Section**: Browse internal storage directories or mounted **SD Cards** and tap any `.note`, `.pdf`, or `.epub` file. It will be added to your **Active Targets** list.
+
+5. **Set Page Locking (Optional)**:
+   - Next to each active target document, tap **`[ Last Page ]`** to toggle it to **`[ Locked ]`**.
+   - Use the **`-5`**, **`<`**, **`>`**, **`+5`** stepper buttons to adjust the target page number (e.g. Page 5 or Page 15).
+
+6. **Save & Start Toggling**:
+   - Tap **`Done`** (in black at top right) to save your configuration.
 
 ---
 
-### 2. Positioning the Floating Icon
-- **Drag & Move**: Touch and drag the floating icon using your **finger** to place it anywhere on your screen (pen input is ignored for moving/tapping the icon). It will retain its position during navigation.
+## How Toggling Works
+
+- **Mode 1: Single Pair (2 Documents)**
+  - Single-tapping the floating bubble with your finger **instantly toggles back and forth** between Document 1 and Document 2.
+- **Mode 2: Multi-Preset List (3+ Documents)**
+  - Single-tapping the floating bubble opens an **Instant Native E-Ink Popup Menu** right at the icon, listing all your preset documents with their locked page badges (e.g., `ProjectNotes (p.5)`). Tap any document in the popup to jump to it in **1 tap**.
 
 ---
 
-### 3. Pairing Notes & Documents
-1. **Long-press** the floating icon with your finger (for ~0.6 seconds). The **Pair Configuration** screen opens.
-2. At the top of the screen, you will see your current pair: `[ NOTE A: ... ]` and `[ NOTE B: ... ]`.
-3. **Quick Navigation with Favorites & Recents**:
-   - **⭐ Favorite Folders**: Tap `★` next to any folder to star it. Starred folders appear at the top of the root menu for instant access.
-   - **🕒 Recent Folders**: Folders you've recently picked files from automatically appear at the top level.
-4. **To update Note B (default)**: Simply navigate the folder browser and tap any file. It updates Note B, saves the pair, and closes automatically (**1 tap**).
-5. **To update Note A**: Tap the `[ NOTE A ]` tab at the top first, then navigate and tap any file below to update Note A.
+## Backup & Automatic Data Recovery
 
----
+All your settings (favorites, presets, pairs, and locked page numbers) are automatically mirrored to:
 
-### 4. Toggling Back & Forth
-- **Single-tap** the floating icon with your finger anytime to switch back and forth between your paired Note A and Note B.
-- Works across `.note` files, `.pdf` files, and `.epub` documents.
+`/storage/emulated/0/MyStyle/LastNote/`
+
+- **Uninstalling/Updating Plugins**: If you remove the plugin or update to a new `.snplg` version, `LastNote` automatically reads from `MyStyle/LastNote/` on startup and **restores all your favorites and targets automatically**.
 
 ---
 

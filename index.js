@@ -1,7 +1,7 @@
 import {AppRegistry, DeviceEventEmitter, Image, NativeModules} from 'react-native';
 import App from './App';
 import {name as appName} from './app.json';
-import {PluginManager, PluginCommAPI} from 'sn-plugin-lib';
+import {PluginManager} from 'sn-plugin-lib';
 
 const BUTTON_TYPE_TOOLBAR  = 1;
 const BUTTON_TOGGLE_ID     = 100;
@@ -15,12 +15,11 @@ const lastNoteModule = NativeModules.LastNote;
 // JS-side overlay state — tracks whether icon is currently on screen
 let overlayActive = false;
 
-// On load: sync JS state with native (handles JS reload while overlay was showing)
+// On load: sync JS state with native
 if (lastNoteModule) {
   lastNoteModule.isOverlayShowing()
     .then((showing: boolean) => {
       if (showing) {
-        // Ghost overlay exists — destroy it; user must re-activate via toolbar
         lastNoteModule.hideOverlay().catch(() => {});
       }
       overlayActive = false;
@@ -32,39 +31,62 @@ if (lastNoteModule) {
 async function performToggle() {
   if (!lastNoteModule) return;
   try {
-    const there = await lastNoteModule.readThere();
-    if (!there) {
-      // No pair set yet — nothing to toggle
-      console.log('LastNote: no pair set. Long-press the icon to choose a note.');
+    const presetsRaw = await lastNoteModule.readPresets().catch(() => null);
+    const presets = presetsRaw ? JSON.parse(presetsRaw) : [];
+
+    if (Array.isArray(presets) && presets.length >= 3) {
+      // 3+ targets -> show native popup window directly attached to floating bubble
+      await lastNoteModule.showPresetPopup(presets);
       return;
     }
+
+    if (Array.isArray(presets) && presets.length === 2) {
+      // 2 targets -> 1-tap direct toggle between target 0 & target 1
+      const [t0, t1] = presets;
+      const destPath = t1.path;
+      const pageNum  = t1.page || 0;
+
+      // Swap in presets storage
+      await lastNoteModule.writePresets(JSON.stringify([t1, t0]));
+      await lastNoteModule.writePair(t1.path, t0.path);
+
+      const destLower = destPath.toLowerCase();
+      if (destLower.endsWith('.note')) {
+        await lastNoteModule.openNoteWithPage(destPath, pageNum);
+      } else if (destLower.endsWith('.pdf') || destLower.endsWith('.epub')) {
+        await lastNoteModule.openDocumentWithPage(destPath, pageNum);
+      }
+      return;
+    }
+
+    // Fallback: 1-pair mode
+    const there = await lastNoteModule.readThere();
+    if (!there) return;
     const here = await lastNoteModule.readHere();
-    // Swap pair in storage BEFORE navigating — next tap is always correct
+
     await lastNoteModule.writePair(there, here || '');
-    const dest = there.toLowerCase();
-    if (dest.endsWith('.note')) {
+    const destLower = there.toLowerCase();
+    if (destLower.endsWith('.note')) {
       await lastNoteModule.openNote(there);
-    } else if (dest.endsWith('.pdf') || dest.endsWith('.epub')) {
+    } else if (destLower.endsWith('.pdf') || destLower.endsWith('.epub')) {
       await lastNoteModule.openDocument(there);
-    } else {
-      console.warn('LastNote: unsupported file type: ' + there);
     }
   } catch (err) {
     console.error('LastNote performToggle failed:', err);
   }
 }
 
-// ─── Module-scope event listeners (survive plugin view closing) ───────────────
+// ─── Module-scope event listeners ────────────────────────────────────────────
 
-// Floating single tap → toggle notes
 DeviceEventEmitter.addListener('onFloatingToggleTap', () => {
   performToggle();
 });
 
-// Floating long-press → open note picker (App.tsx)
 DeviceEventEmitter.addListener('onFloatingLongPress', () => {
-  console.log('LastNote: long-press → opening note picker');
   try {
+    if (lastNoteModule) {
+      lastNoteModule.hidePopup().catch(() => {});
+    }
     PluginManager.showPluginView();
   } catch (e) {
     console.error('LastNote: showPluginView failed', e);
@@ -85,11 +107,9 @@ PluginManager.registerButtonListener({
     if (!lastNoteModule) return;
 
     if (overlayActive) {
-      // Icon is showing → toolbar tap turns plugin off
       await lastNoteModule.hideOverlay().catch(() => {});
       overlayActive = false;
     } else {
-      // Icon is not showing → toolbar tap turns plugin on
       await lastNoteModule.showOverlay().catch(e =>
         console.error('LastNote: showOverlay failed', e)
       );
