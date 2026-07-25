@@ -13,6 +13,9 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
+import androidx.core.content.ContextCompat;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -378,6 +381,20 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     }
 
     @ReactMethod
+    public void readRecentFolders(Promise promise) {
+        try { promise.resolve(readFile("ln_recent_folders.txt")); }
+        catch (Exception e) { promise.reject("READ_RECENT_FOLDERS_FAILED", e); }
+    }
+
+    @ReactMethod
+    public void writeRecentFolders(String json, Promise promise) {
+        try {
+            writeFile("ln_recent_folders.txt", json != null ? json : "[]");
+            promise.resolve(true);
+        } catch (Exception e) { promise.reject("WRITE_RECENT_FOLDERS_FAILED", e); }
+    }
+
+    @ReactMethod
     public void readPageLocks(Promise promise) {
         try { promise.resolve(readFile("ln_pagelocks.txt")); }
         catch (Exception e) { promise.reject("READ_PAGELOCKS_FAILED", e); }
@@ -457,23 +474,79 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                 }
             }
 
-            // 2. Scan /storage/ for removable SD card volumes
-            File storageDir = new File("/storage");
-            if (storageDir.exists() && storageDir.isDirectory()) {
-                File[] vols = storageDir.listFiles();
-                if (vols != null) {
-                    for (File v : vols) {
-                        String vName = v.getName();
-                        if (v.isDirectory() && !vName.equals("emulated") && !vName.equals("self") && !vName.startsWith(".")) {
-                            WritableMap entry = Arguments.createMap();
-                            entry.putString("name", "💳 SD Card (" + vName + ")");
-                            entry.putString("path", v.getAbsolutePath());
-                            entry.putBoolean("isDir", true);
-                            entry.putBoolean("isSdCard", true);
-                            result.pushMap(entry);
+            // 2. Discover real removable SD Card volumes only
+            List<File> sdCardDirs = new ArrayList<>();
+
+            // A. StorageManager getStorageVolumes — most reliable on Android 7+ (API 24+)
+            try {
+                StorageManager sm = (StorageManager) reactContext.getSystemService(Context.STORAGE_SERVICE);
+                if (sm != null) {
+                    List<StorageVolume> volumes = sm.getStorageVolumes();
+                    for (StorageVolume vol : volumes) {
+                        if (!vol.isRemovable()) continue;
+                        File volDir = null;
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                            volDir = vol.getDirectory();
+                        }
+                        if (volDir != null && volDir.exists() && volDir.canRead() && !sdCardDirs.contains(volDir)) {
+                            sdCardDirs.add(volDir);
                         }
                     }
                 }
+            } catch (Exception ignored) {}
+
+            // B. ContextCompat.getExternalFilesDirs — returns app-sandboxed paths for all volumes
+            if (sdCardDirs.isEmpty()) {
+                File[] extDirs = ContextCompat.getExternalFilesDirs(reactContext, null);
+                if (extDirs != null) {
+                    for (File f : extDirs) {
+                        if (f == null) continue;
+                        String path = f.getAbsolutePath();
+                        // Skip the primary internal storage
+                        if (path.contains("/emulated/")) continue;
+                        int idx = path.indexOf("/Android/data");
+                        if (idx > 0) {
+                            File sdRoot = new File(path.substring(0, idx));
+                            if (sdRoot.exists() && sdRoot.canRead() && !sdCardDirs.contains(sdRoot)) {
+                                sdCardDirs.add(sdRoot);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // C. Last resort: scan /storage/ for UUID-format dirs only (e.g. 69D8-7B85)
+            if (sdCardDirs.isEmpty()) {
+                File storageRoot = new File("/storage");
+                File[] vols = storageRoot.listFiles();
+                if (vols != null) {
+                    for (File v : vols) {
+                        if (!v.isDirectory()) continue;
+                        String n = v.getName();
+                        // UUID format: 4 hex chars, dash, 4 hex chars
+                        if (n.matches("[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}") && v.canRead()) {
+                            if (!sdCardDirs.contains(v)) {
+                                sdCardDirs.add(v);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Deduplicate by canonical path and push into result
+            List<String> seenPaths = new ArrayList<>();
+            for (File sd : sdCardDirs) {
+                try {
+                    String canon = sd.getCanonicalPath();
+                    if (seenPaths.contains(canon)) continue;
+                    seenPaths.add(canon);
+                    WritableMap entry = Arguments.createMap();
+                    entry.putString("name", "SD Card (" + sd.getName() + ")");
+                    entry.putString("path", sd.getAbsolutePath());
+                    entry.putBoolean("isDir", true);
+                    entry.putBoolean("isSdCard", true);
+                    result.pushMap(entry);
+                } catch (Exception ignored) {}
             }
 
             promise.resolve(result);

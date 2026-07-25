@@ -88,7 +88,7 @@ export default function App(): React.JSX.Element {
           NativeModules.LastNote.readThere(),
           NativeModules.LastNote.readFavorites(),
           NativeModules.LastNote.readFavoriteFiles(),
-          NativeModules.LastNote.readRecentFolders(),
+          NativeModules.LastNote.readRecentFolders().catch(() => null),
           PluginCommAPI.getCurrentFilePath().catch(() => null),
           NativeModules.LastNote.readPresets().catch(() => null),
         ]);
