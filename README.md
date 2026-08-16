@@ -1,15 +1,19 @@
 https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
 
-# LastNote (v0.4.0)
+# LastNote (v0.5.0)
 
-LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes (or multiple preset documents) with 1 tap, even while working inside PDF or EPUB documents.
+LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes, multiple preset documents, or specific pages within the same note (e.g. Page 2 and Page 23) with 1 tap, even while working inside PDF or EPUB documents.
 
 ---
 
 ## Key Features
 
-- **Pair & Presets Dashboard**: Manage note pairs and multi-preset document quick-jump targets in a single unified dashboard.
-- **1-Tap Toggling**: Instantly jump between your active note and paired notes or documents.
+- **Pair, Presets & Page Bookmarks Dashboard**: Manage note pairs, multi-preset document targets, and same-note page bookmarks in a single unified dashboard.
+- **Same-Note Page Switching & Bookmarks**: Set multiple page targets (e.g., Page 2 and Page 23) for the same notebook. Switch back and forth between pages in 1 tap without leaving your note.
+- **Horizontal Scrollable Page Strip**: Browse and jump to any page (`[p.1]`, `[p.2: Intro]`, `[p.15: Diagrams]`) with a horizontal touch strip attached under each note target.
+- **Total Page Count Enforcement**: Auto-detects note length and displays `p.X / N` (e.g. `p.2 / 23`). Page steppers and selectors strictly enforce valid page bounds.
+- **Table of Contents (TOC) Heading Auto-Detection**: Automatically reads note headings and displays title badges (`🏷️ Diagrams`). Tap **`+ TOC Headings`** to import all titled pages into your bookmarks in 1 tap.
+- **1-Tap Toggling**: Instantly jump between active notes, paired notes, or bookmarked pages.
 - **Page Locking Stepper (`-5` `<` `p.X` `>` `+5`)**: Lock any document to a specific page number. Use `-5`/`+5` or `<`/`>` steppers to set any page number in seconds.
 - **Breadcrumb Navigation Bar**: Interactive path trail (`Root > Note > ProjectA > Specs`) attached directly inside the FOLDERS card lets you jump directly back from deep subfolders in 1 tap.
 - **SD Card & Full Storage Access**: Automatically detects mounted SD cards (`SD Card (...)`) and lists all top-level storage directories (`Notes`, `Documents`, `MyStyle`, `EXPORT`, `IMPORT`, etc.).

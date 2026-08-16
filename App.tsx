@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {PluginCommAPI, PluginManager} from 'sn-plugin-lib';
+import {PluginCommAPI, PluginFileAPI, PluginManager} from 'sn-plugin-lib';
 
 interface DirItem {
   name: string;
@@ -21,9 +21,11 @@ interface DirItem {
 }
 
 export interface TargetItem {
+  id?: string;
   name: string;
   path: string;
   page: number; // 0 = last page viewed, >0 = locked page
+  label?: string;
 }
 
 const DEFAULT_ROOTS: DirItem[] = [
@@ -58,19 +60,56 @@ export default function App(): React.JSX.Element {
   const [favorites, setFavorites]         = useState<string[]>([]);
   const [favFiles, setFavFiles]           = useState<string[]>([]);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
-  const [currentFile, setCurrentFile]     = useState<string | null>(null);
+  const [_currentFile, setCurrentFile]    = useState<string | null>(null);
 
-  // Active Target List
+  // Active Target List & Metadata Maps
   const [targets, setTargets]             = useState<TargetItem[]>([]);
+  const [totalPageMap, setTotalPageMap]   = useState<{[path: string]: number}>({});
+  const [titleMap, setTitleMap]           = useState<{[path: string]: {[page: number]: string}}>({});
+
+  const fetchNoteMetadata = useCallback(async (filePath: string) => {
+    if (!filePath || !filePath.endsWith('.note')) return;
+    try {
+      const [totalRes, titlesRes] = await Promise.all([
+        PluginFileAPI.getNoteTotalPageNum(filePath).catch(() => null),
+        PluginFileAPI.getTitles(filePath, [0]).catch(() => null),
+      ]);
+
+      if (totalRes && (totalRes as any).success && typeof (totalRes as any).result === 'number') {
+        const total = (totalRes as any).result;
+        setTotalPageMap(prev => ({...prev, [filePath]: total}));
+      }
+
+      if (titlesRes && (titlesRes as any).success && Array.isArray((titlesRes as any).result)) {
+        const titlesArr = (titlesRes as any).result;
+        const pageTitleMap: {[page: number]: string} = {};
+        for (const item of titlesArr) {
+          if (item && typeof item.page === 'number') {
+            const titleText = item.title || item.name || item.fullText || '';
+            if (titleText) {
+              pageTitleMap[item.page] = titleText;
+            }
+          }
+        }
+        setTitleMap(prev => ({...prev, [filePath]: pageTitleMap}));
+      }
+    } catch (e) {
+      console.error('LastNote: fetchNoteMetadata failed', e);
+    }
+  }, []);
 
   const saveTargets = useCallback(async (updated: TargetItem[]) => {
-    setTargets(updated);
+    const normalized = updated.map((t, idx) => ({
+      ...t,
+      id: t.id || `${t.path}:${t.page || 0}:${idx}`,
+    }));
+    setTargets(normalized);
     try {
-      await NativeModules.LastNote.writePresets(JSON.stringify(updated));
-      if (updated.length >= 2) {
-        await NativeModules.LastNote.writePair(updated[0].path, updated[1].path);
-      } else if (updated.length === 1) {
-        await NativeModules.LastNote.writePair(updated[0].path, '');
+      await NativeModules.LastNote.writePresets(JSON.stringify(normalized));
+      if (normalized.length >= 2) {
+        await NativeModules.LastNote.writePair(normalized[0].path, normalized[1].path);
+      } else if (normalized.length === 1) {
+        await NativeModules.LastNote.writePair(normalized[0].path, '');
       }
     } catch (e) {
       console.error('LastNote: saveTargets failed', e);
@@ -101,7 +140,7 @@ export default function App(): React.JSX.Element {
       setFavFiles(favFilesRaw ? JSON.parse(favFilesRaw) : []);
       setRecentFolders(recRaw ? JSON.parse(recRaw) : []);
 
-      const cPath = currRes?.result as string;
+      const cPath = (currRes as any)?.result as string;
       const validCurr = cPath && (cPath.endsWith('.note') || cPath.endsWith('.pdf') || cPath.endsWith('.epub')) ? cPath : null;
       setCurrentFile(validCurr);
 
@@ -109,19 +148,38 @@ export default function App(): React.JSX.Element {
       if (!Array.isArray(loadedPresets) || loadedPresets.length === 0) {
         loadedPresets = [];
         if (hereVal) {
-          loadedPresets.push({name: hereVal.split('/').pop() || 'Note A', path: hereVal, page: 0});
+          loadedPresets.push({
+            id: `${hereVal}:1:0`,
+            name: hereVal.split('/').pop() || 'Note A',
+            path: hereVal,
+            page: 1,
+          });
         }
         if (thereVal && thereVal !== hereVal) {
-          loadedPresets.push({name: thereVal.split('/').pop() || 'Note B', path: thereVal, page: 0});
+          loadedPresets.push({
+            id: `${thereVal}:1:1`,
+            name: thereVal.split('/').pop() || 'Note B',
+            path: thereVal,
+            page: 1,
+          });
         }
+      } else {
+        loadedPresets = loadedPresets.map((t, idx) => ({
+          ...t,
+          id: t.id || `${t.path}:${t.page || 0}:${idx}`,
+        }));
       }
       setTargets(loadedPresets);
+
+      // Fetch metadata (total pages and TOC titles) for loaded notes
+      const uniqueNotePaths = Array.from(new Set(loadedPresets.map(t => t.path).filter(p => p.endsWith('.note'))));
+      uniqueNotePaths.forEach(p => fetchNoteMetadata(p));
     } catch (e) {
       console.error('LastNote: loadData failed', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchNoteMetadata]);
 
   useEffect(() => {
     loadData();
@@ -215,33 +273,46 @@ export default function App(): React.JSX.Element {
   }, [dirStack, jumpToBreadcrumb]);
 
   const handleAddOrSelectTarget = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, initialPage: number = 1) => {
       const parentDir = filePath.substring(0, filePath.lastIndexOf('/'));
       if (parentDir) {
         addRecentFolder(parentDir);
       }
       const fName = filePath.split('/').pop() || 'Note';
-      const existsIndex = targets.findIndex(t => t.path === filePath);
-      if (existsIndex >= 0) return;
+      const existing = targets.filter(t => t.path === filePath);
+      let pageToSet = initialPage;
+      if (existing.length > 0 && initialPage === 1) {
+        const maxExisting = Math.max(...existing.map(t => t.page || 1));
+        const total = totalPageMap[filePath] || 999;
+        pageToSet = Math.min(maxExisting + 1, total);
+      }
 
-      const updated = [...targets, {name: fName, path: filePath, page: 0}];
+      const newTarget: TargetItem = {
+        id: `${filePath}:${pageToSet}:${Date.now()}:${Math.random().toString(36).substring(2, 6)}`,
+        name: fName,
+        path: filePath,
+        page: pageToSet,
+      };
+      const updated = [...targets, newTarget];
       await saveTargets(updated);
+      fetchNoteMetadata(filePath);
     },
-    [targets, addRecentFolder, saveTargets],
+    [targets, addRecentFolder, saveTargets, totalPageMap, fetchNoteMetadata],
   );
 
   const handleRemoveTarget = useCallback(
-    async (filePath: string) => {
-      const updated = targets.filter(t => t.path !== filePath);
+    async (targetId: string) => {
+      const updated = targets.filter((t, idx) => (t.id || `${t.path}:${t.page || 0}:${idx}`) !== targetId);
       await saveTargets(updated);
     },
     [targets, saveTargets],
   );
 
   const handleTogglePageLock = useCallback(
-    async (filePath: string) => {
-      const updated = targets.map(t => {
-        if (t.path === filePath) {
+    async (targetId: string) => {
+      const updated = targets.map((t, idx) => {
+        const id = t.id || `${t.path}:${t.page || 0}:${idx}`;
+        if (id === targetId) {
           const newPage = t.page > 0 ? 0 : 1;
           return {...t, page: newPage};
         }
@@ -252,19 +323,67 @@ export default function App(): React.JSX.Element {
     [targets, saveTargets],
   );
 
+  const handleSetTargetPage = useCallback(
+    async (targetId: string, pageNum: number) => {
+      const updated = targets.map((t, idx) => {
+        const id = t.id || `${t.path}:${t.page || 0}:${idx}`;
+        if (id === targetId) {
+          const total = totalPageMap[t.path] || 999;
+          const clamped = Math.max(1, Math.min(total, pageNum));
+          return {...t, page: clamped};
+        }
+        return t;
+      });
+      await saveTargets(updated);
+    },
+    [targets, totalPageMap, saveTargets],
+  );
+
   const handleStepPage = useCallback(
-    async (filePath: string, delta: number) => {
-      const updated = targets.map(t => {
-        if (t.path === filePath) {
+    async (targetId: string, delta: number) => {
+      const updated = targets.map((t, idx) => {
+        const id = t.id || `${t.path}:${t.page || 0}:${idx}`;
+        if (id === targetId) {
+          const total = totalPageMap[t.path] || 999;
           const curr = Math.max(1, Number(t.page) || 1);
-          const next = Math.max(1, curr + delta);
+          const next = Math.max(1, Math.min(total, curr + delta));
           return {...t, page: next};
         }
         return t;
       });
       await saveTargets(updated);
     },
-    [targets, saveTargets],
+    [targets, totalPageMap, saveTargets],
+  );
+
+  const handleImportToc = useCallback(
+    async (filePath: string) => {
+      const tMap = titleMap[filePath];
+      if (!tMap) return;
+      const pagesWithTitles = Object.keys(tMap).map(Number).sort((a, b) => a - b);
+      if (pagesWithTitles.length === 0) return;
+
+      const fName = filePath.split('/').pop() || 'Note';
+      const existingPages = new Set(targets.filter(t => t.path === filePath).map(t => t.page));
+
+      const toAdd: TargetItem[] = [];
+      pagesWithTitles.forEach(pNum => {
+        if (!existingPages.has(pNum)) {
+          toAdd.push({
+            id: `${filePath}:${pNum}:${Date.now()}:${Math.random().toString(36).substring(2, 6)}`,
+            name: fName,
+            path: filePath,
+            page: pNum,
+            label: tMap[pNum],
+          });
+        }
+      });
+
+      if (toAdd.length > 0) {
+        await saveTargets([...targets, ...toAdd]);
+      }
+    },
+    [targets, titleMap, saveTargets],
   );
 
   const handleDone = useCallback(() => {
@@ -308,28 +427,32 @@ export default function App(): React.JSX.Element {
     const ext = item.name.toLowerCase();
     const icon = ext.endsWith('.note') ? '📓' : '📄';
     const isFavFile = favFiles.includes(item.path);
-    const isTarget = targets.some(t => t.path === item.path);
+    const targetMatches = targets.filter(t => t.path === item.path);
+    const targetCount = targetMatches.length;
 
     return (
-      <View style={[styles.item, isTarget && styles.itemDimmed]}>
+      <View style={[styles.item, targetCount > 0 && styles.itemDimmed]}>
         <TouchableOpacity
           style={styles.itemRowLeft}
-          onPress={() => !isTarget && handleAddOrSelectTarget(item.path)}
-          disabled={isTarget}>
+          onPress={() => handleAddOrSelectTarget(item.path)}>
           <Text style={styles.fileIcon}>{icon}</Text>
           <View style={styles.fileInfo}>
-            <Text style={[styles.fileName, isTarget && styles.dimText]}>
+            <Text style={styles.fileName}>
               {item.name}
             </Text>
-            {isTarget && <Text style={styles.tagText}>✓ ACTIVE TARGET</Text>}
+            {targetCount > 0 && (
+              <Text style={styles.tagText}>
+                ✓ {targetCount} {targetCount === 1 ? 'PAGE TARGET / BOOKMARK' : 'PAGE BOOKMARKS'}
+              </Text>
+            )}
           </View>
         </TouchableOpacity>
 
         <View style={styles.itemRowRight}>
           <TouchableOpacity
             style={styles.presetAddBtn}
-            onPress={() => isTarget ? handleRemoveTarget(item.path) : handleAddOrSelectTarget(item.path)}>
-            <Text style={styles.presetAddText}>{isTarget ? '✓ Added' : '+ Add Target'}</Text>
+            onPress={() => handleAddOrSelectTarget(item.path)}>
+            <Text style={styles.presetAddText}>{targetCount > 0 ? '+ Bookmark' : '+ Add Target'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.starBtn}
@@ -374,46 +497,56 @@ export default function App(): React.JSX.Element {
         keyExtractor={() => 'dashboard'}
         renderItem={() => (
           <View style={styles.rootContainer}>
-            {/* ⚡ ACTIVE TARGETS DASHBOARD CARD */}
+            {/* ⚡ ACTIVE TARGETS & BOOKMARKS DASHBOARD CARD */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionBanner}>
                 <Text style={styles.sectionBannerText}>
-                  ⚡ ACTIVE TARGETS ({targets.length} {targets.length === 1 ? 'Target' : targets.length === 2 ? 'Document Pair' : 'Preset Documents'})
+                  ⚡ TARGETS & PAGE BOOKMARKS ({targets.length} {targets.length === 1 ? 'Target' : 'Targets / Bookmarks'})
                 </Text>
               </View>
 
               {targets.length === 0 ? (
                 <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>No target documents selected yet.</Text>
+                  <Text style={styles.emptyText}>No target documents or bookmarks selected yet.</Text>
                   <Text style={styles.emptySubtext}>Tap any note or PDF in the browser below to add it!</Text>
                 </View>
               ) : (
                 targets.map((t, idx) => {
+                  const targetId = t.id || `${t.path}:${t.page || 0}:${idx}`;
                   const isLocked = t.page > 0;
+                  const totalPages = totalPageMap[t.path] || 0;
+                  const pageTitleMap = titleMap[t.path] || {};
+                  const activeTitle = pageTitleMap[t.page] || t.label;
+                  const hasTocTitles = Object.keys(pageTitleMap).length > 0;
 
                   return (
-                    <View key={t.path} style={styles.targetRowContainer}>
+                    <View key={targetId} style={styles.targetRowContainer}>
                       <View style={styles.targetRowMain}>
                         <Text style={styles.targetNum}>{idx + 1}.</Text>
                         <Text style={styles.fileIcon}>{t.path.endsWith('.note') ? '📓' : '📄'}</Text>
                         <View style={styles.fileInfo}>
-                          <Text style={styles.fileName}>{t.name}</Text>
+                          <Text style={styles.fileName}>
+                            {t.name} {t.page > 0 ? `(p.${t.page}${totalPages > 0 ? ` / ${totalPages}` : ''})` : ''}
+                          </Text>
+                          {activeTitle && (
+                            <Text style={styles.titleBadgeText}>🏷️ {activeTitle}</Text>
+                          )}
                           <Text style={styles.pathSubtext}>{t.path.replace('/storage/emulated/0/', '')}</Text>
                         </View>
 
-                        <TouchableOpacity style={styles.removeBtn} onPress={() => handleRemoveTarget(t.path)}>
+                        <TouchableOpacity style={styles.removeBtn} onPress={() => handleRemoveTarget(targetId)}>
                           <Text style={styles.removeText}>🗑️</Text>
                         </TouchableOpacity>
                       </View>
 
-                      {/* COMPLETE TARGET ROW DESIGN: Stepper + Lock Mode */}
+                      {/* COMPLETE TARGET ROW DESIGN: Stepper + Lock Mode + Bookmark Duplicate + Import TOC */}
                       <View style={styles.targetControlsRow}>
                         {/* Lock Mode Toggle */}
                         <TouchableOpacity
                           style={[styles.lockPillBtn, isLocked && styles.lockPillActive]}
-                          onPress={() => handleTogglePageLock(t.path)}>
+                          onPress={() => handleTogglePageLock(targetId)}>
                           <Text style={[styles.lockPillText, isLocked && styles.lockPillTextActive]}>
-                            {isLocked ? '🔒 Locked' : '🔓 Last Page'}
+                            {isLocked ? `🔒 Page ${t.page}` : '🔓 Last Page'}
                           </Text>
                         </TouchableOpacity>
 
@@ -422,12 +555,12 @@ export default function App(): React.JSX.Element {
                           <View style={styles.stepperBox}>
                             <TouchableOpacity
                               style={styles.stepBtn}
-                              onPress={() => handleStepPage(t.path, -5)}>
+                              onPress={() => handleStepPage(targetId, -5)}>
                               <Text style={styles.stepBtnText}>-5</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.stepBtn}
-                              onPress={() => handleStepPage(t.path, -1)}>
+                              onPress={() => handleStepPage(targetId, -1)}>
                               <Text style={styles.stepBtnText}>‹</Text>
                             </TouchableOpacity>
 
@@ -435,17 +568,63 @@ export default function App(): React.JSX.Element {
 
                             <TouchableOpacity
                               style={styles.stepBtn}
-                              onPress={() => handleStepPage(t.path, 1)}>
+                              onPress={() => handleStepPage(targetId, 1)}>
                               <Text style={styles.stepBtnText}>›</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.stepBtn}
-                              onPress={() => handleStepPage(t.path, 5)}>
+                              onPress={() => handleStepPage(targetId, 5)}>
                               <Text style={styles.stepBtnText}>+5</Text>
                             </TouchableOpacity>
                           </View>
                         )}
+
+                        {/* Add another page bookmark for this note */}
+                        <TouchableOpacity
+                          style={styles.addBookmarkBtn}
+                          onPress={() => handleAddOrSelectTarget(t.path, isLocked ? t.page + 1 : 1)}>
+                          <Text style={styles.addBookmarkText}>+ Page</Text>
+                        </TouchableOpacity>
+
+                        {/* Import TOC button */}
+                        {hasTocTitles && (
+                          <TouchableOpacity
+                            style={styles.importTocBtn}
+                            onPress={() => handleImportToc(t.path)}>
+                            <Text style={styles.importTocText}>+ TOC Headings</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
+
+                      {/* 📜 HORIZONTAL SCROLLABLE PAGE STRIP */}
+                      {t.path.endsWith('.note') && (
+                        <View style={styles.pageStripContainer}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {Array.from({length: Math.max(totalPages || 1, 1)}, (_, i) => i + 1).map(pNum => {
+                              const isSelected = t.page === pNum;
+                              const pTitle = pageTitleMap[pNum];
+                              return (
+                                <TouchableOpacity
+                                  key={pNum}
+                                  style={[
+                                    styles.pagePill,
+                                    isSelected && styles.pagePillSelected,
+                                    pTitle && !isSelected && styles.pagePillWithTitle,
+                                  ]}
+                                  onPress={() => handleSetTargetPage(targetId, pNum)}>
+                                  <Text
+                                    style={[
+                                      styles.pagePillText,
+                                      isSelected && styles.pagePillTextSelected,
+                                    ]}>
+                                    p.{pNum}{pTitle ? `: ${pTitle}` : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      )}
                     </View>
                   );
                 })
@@ -653,6 +832,21 @@ const styles = StyleSheet.create({
 
   pdfNoticeBox:      {paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: '#888888', borderRadius: 4, backgroundColor: '#f0f0f0'},
   pdfNoticeText:     {fontSize: 13, fontWeight: '700', color: '#333333'},
+
+  addBookmarkBtn:    {paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1.5, borderColor: '#000000', borderRadius: 6, backgroundColor: '#ffffff', marginLeft: 10},
+  addBookmarkText:   {fontSize: 13, fontWeight: '800', color: '#000000'},
+
+  importTocBtn:      {paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1.5, borderColor: '#000000', borderRadius: 6, backgroundColor: '#e2e8f0', marginLeft: 10},
+  importTocText:     {fontSize: 13, fontWeight: '800', color: '#000000'},
+
+  titleBadgeText:    {fontSize: 13, fontWeight: '700', color: '#000000', marginTop: 2},
+
+  pageStripContainer:{marginTop: 10, paddingLeft: 34},
+  pagePill:          {paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1.5, borderColor: '#666666', borderRadius: 6, backgroundColor: '#ffffff', marginRight: 6},
+  pagePillSelected:  {borderColor: '#000000', backgroundColor: '#000000'},
+  pagePillWithTitle: {borderColor: '#000000', backgroundColor: '#e2e8f0'},
+  pagePillText:      {fontSize: 13, fontWeight: '800', color: '#000000'},
+  pagePillTextSelected: {color: '#ffffff'},
 
   removeBtn:         {padding: 6},
   removeText:        {fontSize: 18},

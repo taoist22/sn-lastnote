@@ -235,11 +235,13 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                 final String name = item.hasKey("name") ? item.getString("name") : "Note";
                 final String path = item.hasKey("path") ? item.getString("path") : "";
                 final int page = item.hasKey("page") ? item.getInt("page") : 0;
+                final String label = item.hasKey("label") && !item.isNull("label") ? item.getString("label") : null;
 
                 TextView tv = new TextView(appCtx);
                 String prefix = path.endsWith(".note") ? "📓 " : "📄 ";
                 String pageSuffix = page > 0 ? " (p." + page + ")" : "";
-                tv.setText(prefix + name + pageSuffix);
+                String labelDisplay = (!TextUtils.isEmpty(label)) ? " - " + label : "";
+                tv.setText(prefix + name + pageSuffix + labelDisplay);
                 tv.setTextSize(17);
                 tv.setTextColor(Color.BLACK);
                 int hPad = (int) (14 * density);
