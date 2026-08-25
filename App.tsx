@@ -12,6 +12,11 @@ import {
   View,
 } from 'react-native';
 import {PluginCommAPI, PluginFileAPI, PluginManager} from 'sn-plugin-lib';
+import {buildPageList, buildUiTitleMap} from './src/domain/pageMetadata';
+import {
+  ensureFileReadPermission,
+  ensureFileWritePermission,
+} from './src/pluginPermissions';
 
 interface DirItem {
   name: string;
@@ -61,6 +66,7 @@ export default function App(): React.JSX.Element {
   const [favFiles, setFavFiles]           = useState<string[]>([]);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [_currentFile, setCurrentFile]    = useState<string | null>(null);
+  const [accessError, setAccessError]     = useState<string | null>(null);
 
   // Active Target List & Metadata Maps
   const [targets, setTargets]             = useState<TargetItem[]>([]);
@@ -68,30 +74,25 @@ export default function App(): React.JSX.Element {
   const [titleMap, setTitleMap]           = useState<{[path: string]: {[page: number]: string}}>({});
 
   const fetchNoteMetadata = useCallback(async (filePath: string) => {
-    if (!filePath || !filePath.endsWith('.note')) return;
+    if (!filePath || !filePath.toLowerCase().endsWith('.note')) return;
     try {
-      const [totalRes, titlesRes] = await Promise.all([
-        PluginFileAPI.getNoteTotalPageNum(filePath).catch(() => null),
-        PluginFileAPI.getTitles(filePath, [0]).catch(() => null),
-      ]);
-
+      const totalRes = await PluginFileAPI.getNoteTotalPageNum(filePath).catch(() => null);
       if (totalRes && (totalRes as any).success && typeof (totalRes as any).result === 'number') {
         const total = (totalRes as any).result;
         setTotalPageMap(prev => ({...prev, [filePath]: total}));
-      }
-
-      if (titlesRes && (titlesRes as any).success && Array.isArray((titlesRes as any).result)) {
-        const titlesArr = (titlesRes as any).result;
-        const pageTitleMap: {[page: number]: string} = {};
-        for (const item of titlesArr) {
-          if (item && typeof item.page === 'number') {
-            const titleText = item.title || item.name || item.fullText || '';
-            if (titleText) {
-              pageTitleMap[item.page] = titleText;
-            }
+        if (total > 0) {
+          const titlesRes = await PluginFileAPI.getTitles(
+            filePath,
+            buildPageList(total),
+          ).catch(() => null);
+          const nativeTitles = titlesRes?.result;
+          if (titlesRes?.success && Array.isArray(nativeTitles)) {
+            setTitleMap(prev => ({
+              ...prev,
+              [filePath]: buildUiTitleMap(nativeTitles, total),
+            }));
           }
         }
-        setTitleMap(prev => ({...prev, [filePath]: pageTitleMap}));
       }
     } catch (e) {
       console.error('LastNote: fetchNoteMetadata failed', e);
@@ -99,6 +100,11 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const saveTargets = useCallback(async (updated: TargetItem[]) => {
+    if (!(await ensureFileWritePermission())) {
+      setAccessError('File access was not allowed. Grant file access to save LastNote targets and backups.');
+      return;
+    }
+    setAccessError(null);
     const normalized = updated.map((t, idx) => ({
       ...t,
       id: t.id || `${t.path}:${t.page || 0}:${idx}`,
@@ -120,6 +126,11 @@ export default function App(): React.JSX.Element {
     setDirStack([]);
     setLoading(true);
     try {
+      if (!(await ensureFileReadPermission())) {
+        setAccessError('File access was not allowed. Grant file access to browse LastNote targets and restore backups.');
+        return;
+      }
+      setAccessError(null);
       const [rItems, hereVal, thereVal, favRaw, favFilesRaw, recRaw, currRes, presetsRaw] =
         await Promise.all([
           NativeModules.LastNote.listRootDirectories().catch(() => []),
@@ -141,7 +152,7 @@ export default function App(): React.JSX.Element {
       setRecentFolders(recRaw ? JSON.parse(recRaw) : []);
 
       const cPath = (currRes as any)?.result as string;
-      const validCurr = cPath && (cPath.endsWith('.note') || cPath.endsWith('.pdf') || cPath.endsWith('.epub')) ? cPath : null;
+      const validCurr = cPath && /\.(note|pdf|epub|cbz|xps|fb2)$/i.test(cPath) ? cPath : null;
       setCurrentFile(validCurr);
 
       let loadedPresets: TargetItem[] = presetsRaw ? JSON.parse(presetsRaw) : [];
@@ -172,7 +183,7 @@ export default function App(): React.JSX.Element {
       setTargets(loadedPresets);
 
       // Fetch metadata (total pages and TOC titles) for loaded notes
-      const uniqueNotePaths = Array.from(new Set(loadedPresets.map(t => t.path).filter(p => p.endsWith('.note'))));
+      const uniqueNotePaths = Array.from(new Set(loadedPresets.map(t => t.path).filter(p => p.toLowerCase().endsWith('.note'))));
       uniqueNotePaths.forEach(p => fetchNoteMetadata(p));
     } catch (e) {
       console.error('LastNote: loadData failed', e);
@@ -191,6 +202,11 @@ export default function App(): React.JSX.Element {
 
   const toggleFavoriteFolder = useCallback(
     async (folderPath: string) => {
+      if (!(await ensureFileWritePermission())) {
+        setAccessError('File access was not allowed. Grant file access to save favorites.');
+        return;
+      }
+      setAccessError(null);
       const updated = favorites.includes(folderPath)
         ? favorites.filter(p => p !== folderPath)
         : [...favorites, folderPath];
@@ -206,6 +222,11 @@ export default function App(): React.JSX.Element {
 
   const toggleFavoriteFile = useCallback(
     async (filePath: string) => {
+      if (!(await ensureFileWritePermission())) {
+        setAccessError('File access was not allowed. Grant file access to save favorites.');
+        return;
+      }
+      setAccessError(null);
       const updated = favFiles.includes(filePath)
         ? favFiles.filter(p => p !== filePath)
         : [...favFiles, filePath];
@@ -221,6 +242,7 @@ export default function App(): React.JSX.Element {
 
   const addRecentFolder = useCallback(
     async (folderPath: string) => {
+      if (!(await ensureFileWritePermission())) return;
       const filtered = recentFolders.filter(p => p !== folderPath);
       const updated = [folderPath, ...filtered].slice(0, 5);
       setRecentFolders(updated);
@@ -236,6 +258,11 @@ export default function App(): React.JSX.Element {
   const navigateTo = useCallback(async (dirPath: string) => {
     setLoading(true);
     try {
+      if (!(await ensureFileReadPermission())) {
+        setAccessError('File access was not allowed. Grant file access to browse LastNote folders.');
+        return;
+      }
+      setAccessError(null);
       const result: DirItem[] = await NativeModules.LastNote.listDirectory(dirPath);
       setDirStack(buildBreadcrumbStack(dirPath));
       setItems(result);
@@ -257,6 +284,11 @@ export default function App(): React.JSX.Element {
     const targetPath = newStack[newStack.length - 1];
     setLoading(true);
     try {
+      if (!(await ensureFileReadPermission())) {
+        setAccessError('File access was not allowed. Grant file access to browse LastNote folders.');
+        return;
+      }
+      setAccessError(null);
       const result: DirItem[] = await NativeModules.LastNote.listDirectory(targetPath);
       setDirStack(newStack);
       setItems(result);
@@ -491,6 +523,13 @@ export default function App(): React.JSX.Element {
         </View>
       </View>
 
+      {accessError && (
+        <TouchableOpacity style={styles.accessError} onPress={loadData}>
+          <Text style={styles.accessErrorText}>{accessError}</Text>
+          <Text style={styles.accessRetryText}>Tap to request access again</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Main Scroll Content */}
       <FlatList
         data={[1]}
@@ -508,7 +547,7 @@ export default function App(): React.JSX.Element {
               {targets.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Text style={styles.emptyText}>No target documents or bookmarks selected yet.</Text>
-                  <Text style={styles.emptySubtext}>Tap any note or PDF in the browser below to add it!</Text>
+                  <Text style={styles.emptySubtext}>Tap any supported note or document below to add it.</Text>
                 </View>
               ) : (
                 targets.map((t, idx) => {
@@ -794,6 +833,9 @@ const styles = StyleSheet.create({
   cancelText:        {fontSize: 14, color: '#444444', fontWeight: '700'},
   saveDoneBtn:       {paddingHorizontal: 14, paddingVertical: 6, borderWidth: 2, borderColor: '#000000', borderRadius: 6, backgroundColor: '#000000'},
   saveDoneText:      {fontSize: 15, color: '#ffffff', fontWeight: '900'},
+  accessError:       {marginHorizontal: 12, marginTop: 10, padding: 12, borderWidth: 2, borderColor: '#000000', backgroundColor: '#eeeeee'},
+  accessErrorText:   {fontSize: 15, color: '#000000', fontWeight: '800'},
+  accessRetryText:   {fontSize: 13, color: '#000000', fontWeight: '700', marginTop: 4},
 
   breadcrumbCardBar: {paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f0f0f0', borderBottomWidth: 1.5, borderBottomColor: '#cccccc'},
   breadcrumbBar:     {flexDirection: 'row', marginTop: 10, paddingTop: 6, borderTopWidth: 1.5, borderTopColor: '#dddddd'},

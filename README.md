@@ -1,6 +1,6 @@
 https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
 
-# LastNote (v0.5.0)
+# LastNote (v0.5.1)
 
 LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes, multiple preset documents, or specific pages within the same note (e.g. Page 2 and Page 23) with 1 tap, even while working inside PDF or EPUB documents.
 
@@ -10,6 +10,7 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 
 - **Pair, Presets & Page Bookmarks Dashboard**: Manage note pairs, multi-preset document targets, and same-note page bookmarks in a single unified dashboard.
 - **Same-Note Page Switching & Bookmarks**: Set multiple page targets (e.g., Page 2 and Page 23) for the same notebook. Switch back and forth between pages in 1 tap without leaving your note.
+- **Native Open & Page Jump APIs**: Uses Supernote's supported `openFile` and `jumpToPage` APIs on current firmware, with the prior native opener retained as a compatibility fallback.
 - **Horizontal Scrollable Page Strip**: Browse and jump to any page (`[p.1]`, `[p.2: Intro]`, `[p.15: Diagrams]`) with a horizontal touch strip attached under each note target.
 - **Total Page Count Enforcement**: Auto-detects note length and displays `p.X / N` (e.g. `p.2 / 23`). Page steppers and selectors strictly enforce valid page bounds.
 - **Table of Contents (TOC) Heading Auto-Detection**: Automatically reads note headings and displays title badges (`🏷️ Diagrams`). Tap **`+ TOC Headings`** to import all titled pages into your bookmarks in 1 tap.
@@ -22,7 +23,7 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 - **Favorite Files & Folders**: Star your most important notebooks, PDFs, and working directories for instant 1-tap access.
 - **Automatic MyStyle Storage Backup**: Configuration automatically backs up to `/storage/emulated/0/MyStyle/LastNote/`, preserving all your favorites, presets, page-locks, and pairs across plugin uninstalls and updates.
 - **Optimized E-Ink UI**: High-contrast typography, large black star indicators, and bold container cards designed specifically for Supernote greyscale screens.
-- **Multi-Format Support**: Switches seamlessly between `.note` notebooks, PDF documents, and EPUB files.
+- **Multi-Format Support**: Switches among `.note`, `.pdf`, `.epub`, `.cbz`, `.xps`, and `.fb2` files supported by Supernote's file API.
 
 ---
 
@@ -33,6 +34,7 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 2. Connect your Supernote to your computer via USB (or use the Partner App/Cloud).
 3. Copy `LastNote.snplg` into the `MyStyle/` folder on your Supernote device's storage.
 4. On your device, go to **Settings** -> **Apps** -> **Plugins** -> **Add Plugin** and select `LastNote`.
+5. When LastNote first browses or saves targets, allow the requested file access. Read access is used to browse and open files; write access is used only for LastNote settings and its `MyStyle/LastNote` backup.
 
 ---
 
@@ -92,6 +94,8 @@ The plugin icon is:
 
 ### Environment Setup
 React Native is locked to `0.79.2` because it must match the Supernote `PluginHost` runtime. Building the plugin requires Java JDK 21 and the Android SDK (Platform 35).
+
+LastNote targets use one-based page numbers in the UI and stored settings. The official Supernote `openFile` and `jumpToPage` APIs use zero-based page indices, so navigation converts at the API boundary. Native TOC title results are also converted from zero-based pages before display.
 
 ### Standard Workflow
 Run these standard checks during development:

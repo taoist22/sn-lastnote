@@ -675,6 +675,14 @@ main() {
     local project_root="${1:-$(pwd)}"
     get_package_info "$project_root"
 
+    # Never leave a previous installable package in place while a new build is
+    # running. A failed build must not look like a successful fresh package.
+    local previous_outputs="$project_root/build/outputs"
+    if [[ -d "$previous_outputs" ]]; then
+        rm -f "$previous_outputs/${PACKAGE_NAME}.snplg" "$previous_outputs/${PACKAGE_NAME}.zip"
+        write_color_output "Removed previous ${PACKAGE_NAME} build artifacts" "Blue"
+    fi
+
     if [[ -f "$project_root/tools/patch-metro-watchers.js" ]] && command -v node >/dev/null 2>&1; then
         node "$project_root/tools/patch-metro-watchers.js" "$project_root" --quiet || write_color_output "Metro watcher patch failed; continuing build" "Yellow"
     fi

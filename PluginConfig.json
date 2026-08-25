@@ -3,9 +3,13 @@
   "desc": "1-Tap toggle back to your last viewed note.",
   "author": "",
   "iconPath": "assets/two-arrows.png",
-  "versionName": "0.5.0",
-  "versionCode": "6",
+  "versionName": "0.5.1",
+  "versionCode": "7",
   "pluginID": "vlg9-4sgbngei7gj",
   "pluginKey": "LastNote",
-  "jsMainPath": "index"
+  "jsMainPath": "index",
+  "uses-permissions": [
+    "plugin.permission.FILE:READ",
+    "plugin.permission.FILE:WRITE"
+  ]
 }

@@ -49,6 +49,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     private static final String FILE_THERE       = "ln_there.txt";
     private static final String EVENT_TAP        = "onFloatingToggleTap";
     private static final String EVENT_LONG_PRESS = "onFloatingLongPress";
+    private static final String EVENT_PRESET     = "onPresetSelected";
     private static final long   LONG_PRESS_MS    = 600;
 
     // Static singleton — survives JS reloads within PluginHost process
@@ -260,11 +261,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                     @Override
                     public void onClick(View v) {
                         hidePopupInternal();
-                        if (path.endsWith(".note")) {
-                            openNoteInternal(path, page);
-                        } else {
-                            openDocumentInternal(path, page);
-                        }
+                        sendTargetEvent(EVENT_PRESET, path, page);
                     }
                 });
 
@@ -311,6 +308,25 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                     .emit(name, null);
         } catch (Exception e) {
             Log.e(TAG, "sendEvent failed: " + name, e);
+        }
+    }
+
+    private void sendTargetEvent(String name, String path, int page) {
+        try {
+            WritableMap target = Arguments.createMap();
+            target.putString("path", path);
+            target.putInt("page", page);
+            reactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit(name, target);
+        } catch (Exception e) {
+            Log.e(TAG, "sendTargetEvent failed: " + name, e);
+            // Preserve navigation if JavaScript is temporarily unavailable.
+            if (path != null && path.toLowerCase().endsWith(".note")) {
+                openNoteInternal(path, page);
+            } else {
+                openDocumentInternal(path, page);
+            }
         }
     }
 
@@ -569,7 +585,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             File[] files = dir.listFiles();
             if (files == null) files = new File[0];
 
-            final String[] exts = {".note", ".pdf", ".epub"};
+            final String[] exts = {".note", ".pdf", ".epub", ".cbz", ".xps", ".fb2"};
 
             // Folders first, then supported files, both alpha-sorted
             Arrays.sort(files, (a, b) -> {

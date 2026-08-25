@@ -2,6 +2,7 @@ import {AppRegistry, DeviceEventEmitter, Image, NativeModules} from 'react-nativ
 import App from './App';
 import {name as appName} from './app.json';
 import {PluginManager} from 'sn-plugin-lib';
+import {navigateToTarget} from './src/services/fileNavigation';
 
 const BUTTON_TYPE_TOOLBAR  = 1;
 const BUTTON_TOGGLE_ID     = 100;
@@ -43,19 +44,10 @@ async function performToggle() {
     if (Array.isArray(presets) && presets.length === 2) {
       // 2 targets -> 1-tap direct toggle between target 0 & target 1
       const [t0, t1] = presets;
-      const destPath = t1.path;
-      const pageNum  = t1.page || 0;
-
       // Swap in presets storage
       await lastNoteModule.writePresets(JSON.stringify([t1, t0]));
       await lastNoteModule.writePair(t1.path, t0.path);
-
-      const destLower = destPath.toLowerCase();
-      if (destLower.endsWith('.note')) {
-        await lastNoteModule.openNoteWithPage(destPath, pageNum);
-      } else if (destLower.endsWith('.pdf') || destLower.endsWith('.epub')) {
-        await lastNoteModule.openDocumentWithPage(destPath, pageNum);
-      }
+      await navigateToTarget(t1);
       return;
     }
 
@@ -65,12 +57,7 @@ async function performToggle() {
     const here = await lastNoteModule.readHere();
 
     await lastNoteModule.writePair(there, here || '');
-    const destLower = there.toLowerCase();
-    if (destLower.endsWith('.note')) {
-      await lastNoteModule.openNote(there);
-    } else if (destLower.endsWith('.pdf') || destLower.endsWith('.epub')) {
-      await lastNoteModule.openDocument(there);
-    }
+    await navigateToTarget({path: there, page: 0});
   } catch (err) {
     console.error('LastNote performToggle failed:', err);
   }
@@ -91,6 +78,25 @@ DeviceEventEmitter.addListener('onFloatingLongPress', () => {
   } catch (e) {
     console.error('LastNote: showPluginView failed', e);
   }
+});
+
+DeviceEventEmitter.addListener('onPresetSelected', target => {
+  navigateToTarget(target).catch(err =>
+    console.error('LastNote preset navigation failed:', err)
+  );
+});
+
+// Remove native overlay windows when the plugin is unmounted or destroyed.
+// Closing only the dashboard emits an earlier lifecycle state and deliberately
+// leaves the user-enabled floating toggle in place.
+PluginManager.registerPluginLifeListener({
+  onMsg(message) {
+    const state = typeof message === 'number' ? message : message?.state;
+    if (state === 4 || state === 5) {
+      lastNoteModule?.hideOverlay().catch(() => {});
+      overlayActive = false;
+    }
+  },
 });
 
 // ─── Toolbar button ──────────────────────────────────────────────────────────
