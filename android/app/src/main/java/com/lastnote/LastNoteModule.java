@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ScrollView;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
@@ -209,6 +210,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
 
     @ReactMethod
     public void showPresetPopup(ReadableArray items, Promise promise) {
+        reactContext.runOnUiQueueThread(() -> {
         try {
             hidePopupInternal();
             Context appCtx = reactContext.getApplicationContext();
@@ -218,7 +220,8 @@ public class LastNoteModule extends ReactContextBaseJavaModule
 
             DisplayMetrics dm = appCtx.getResources().getDisplayMetrics();
             float density = dm.density > 0 ? dm.density : 1.5f;
-            int popupWidth = Math.round(280 * density);
+            int margin = Math.round(12 * density);
+            int popupWidth = Math.min(Math.round(320 * density), dm.widthPixels - 2 * margin);
 
             LinearLayout container = new LinearLayout(appCtx);
             container.setOrientation(LinearLayout.VERTICAL);
@@ -239,10 +242,9 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                 final String label = item.hasKey("label") && !item.isNull("label") ? item.getString("label") : null;
 
                 TextView tv = new TextView(appCtx);
-                String prefix = path.endsWith(".note") ? "📓 " : "📄 ";
-                String pageSuffix = page > 0 ? " (p." + page + ")" : "";
+                String pageSuffix = page > 0 ? " (p." + page + ")" : " (last viewed)";
                 String labelDisplay = (!TextUtils.isEmpty(label)) ? " - " + label : "";
-                tv.setText(prefix + name + pageSuffix + labelDisplay);
+                tv.setText(name + pageSuffix + labelDisplay);
                 tv.setTextSize(17);
                 tv.setTextColor(Color.BLACK);
                 int hPad = (int) (14 * density);
@@ -268,24 +270,38 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                 container.addView(tv);
             }
 
+            TextView close = new TextView(appCtx);
+            close.setText("Close");
+            close.setTextColor(Color.BLACK);
+            close.setTextSize(17);
+            close.setPadding(pPad * 2, pPad * 2, pPad * 2, pPad * 2);
+            close.setOnClickListener(v -> hidePopupInternal());
+            container.addView(close, 0);
+            ScrollView scroll = new ScrollView(appCtx);
+            scroll.addView(container);
+            int maxHeight = Math.max(1, dm.heightPixels - 2 * margin);
+            container.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int popupHeight = Math.min(container.getMeasuredHeight(), Math.min(maxHeight, Math.round(dm.heightPixels * 0.65f)));
             final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                     popupWidth,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    popupHeight,
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT
             );
             params.gravity = Gravity.TOP | Gravity.START;
-            params.x = Math.max(20, sSavedX);
-            params.y = Math.max(20, sSavedY + 80);
+            params.x = Math.max(margin, Math.min(sSavedX, dm.widthPixels - popupWidth - margin));
+            params.y = Math.max(margin, Math.min(sSavedY + 80, dm.heightPixels - popupHeight - margin));
 
-            sPopupView = container;
+            sPopupView = scroll;
             sWindowManager.addView(sPopupView, params);
             promise.resolve(true);
         } catch (Exception e) {
             Log.e(TAG, "showPresetPopup failed", e);
             promise.reject("POPUP_FAILED", e);
         }
+        });
     }
 
     @ReactMethod

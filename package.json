@@ -1,6 +1,6 @@
 {
   "name": "LastNote",
-  "version": "0.5.1",
+  "version": "0.6.4",
   "description": "1-Tap toggle back to your last viewed note.",
   "private": true,
   "scripts": {

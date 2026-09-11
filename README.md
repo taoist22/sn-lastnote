@@ -1,19 +1,25 @@
 https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
 
-# LastNote (v0.5.1)
+# LastNote (v0.6.4)
 
 LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes, multiple preset documents, or specific pages within the same note (e.g. Page 2 and Page 23) with 1 tap, even while working inside PDF or EPUB documents.
 
 ---
 
+## Duplicate Bookmark Fix (v0.6.1)
+
+Saving now rejects duplicate file/page destinations. Existing duplicate destinations
+are shown once in the dashboard and floating menu, keeping the first bookmark.
+The next successful bookmark save writes the deduplicated list to storage.
+
 ## Key Features
 
-- **Pair, Presets & Page Bookmarks Dashboard**: Manage note pairs, multi-preset document targets, and same-note page bookmarks in a single unified dashboard.
+- **Bookmarks Dashboard**: Manage note pairs, multi-preset document targets, and same-note page bookmarks in a single unified dashboard.
 - **Same-Note Page Switching & Bookmarks**: Set multiple page targets (e.g., Page 2 and Page 23) for the same notebook. Switch back and forth between pages in 1 tap without leaving your note.
 - **Native Open & Page Jump APIs**: Uses Supernote's supported `openFile` and `jumpToPage` APIs on current firmware, with the prior native opener retained as a compatibility fallback.
-- **Horizontal Scrollable Page Strip**: Browse and jump to any page (`[p.1]`, `[p.2: Intro]`, `[p.15: Diagrams]`) with a horizontal touch strip attached under each note target.
-- **Total Page Count Enforcement**: Auto-detects note length and displays `p.X / N` (e.g. `p.2 / 23`). Page steppers and selectors strictly enforce valid page bounds.
-- **Table of Contents (TOC) Heading Auto-Detection**: Automatically reads note headings and displays title badges (`🏷️ Diagrams`). Tap **`+ TOC Headings`** to import all titled pages into your bookmarks in 1 tap.
+- **Page Picker & Heading Search**: Expand Edit for a compact two-column editor. Save the optional name and page together with Save changes; Choose from headings reveals heading search. Navigate using the floating toggle menu.
+- **Total Page Count Enforcement**: Auto-detects note length and displays `p.X / N` (e.g. `p.2 / 23`). Page controls enforce known note bounds. Page counts may be unavailable for other document formats.
+- **Table of Contents (TOC) Heading Auto-Detection**: Automatically reads note headings and displays title badges (`🏷️ Diagrams`). Tap **Edit → Import TOC headings** to import all titled pages into your bookmarks in 1 tap.
 - **1-Tap Toggling**: Instantly jump between active notes, paired notes, or bookmarked pages.
 - **Page Locking Stepper (`-5` `<` `p.X` `>` `+5`)**: Lock any document to a specific page number. Use `-5`/`+5` or `<`/`>` steppers to set any page number in seconds.
 - **Breadcrumb Navigation Bar**: Interactive path trail (`Root > Note > ProjectA > Specs`) attached directly inside the FOLDERS card lets you jump directly back from deep subfolders in 1 tap.
@@ -24,6 +30,11 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 - **Automatic MyStyle Storage Backup**: Configuration automatically backs up to `/storage/emulated/0/MyStyle/LastNote/`, preserving all your favorites, presets, page-locks, and pairs across plugin uninstalls and updates.
 - **Optimized E-Ink UI**: High-contrast typography, large black star indicators, and bold container cards designed specifically for Supernote greyscale screens.
 - **Multi-Format Support**: Switches among `.note`, `.pdf`, `.epub`, `.cbz`, `.xps`, and `.fb2` files supported by Supernote's file API.
+
+- **Bookmark Current Page**: Add the currently open file and page directly from the dashboard.
+- **Editable Bookmarks**: Rename and reorder bookmarks under Edit. Compact name and page fields leave room for controls.
+- **Scrollable Quick Menu**: Long lists scroll within the screen, with a Close action.
+- **Reliable Pair Toggle**: Selects the other target using the current file/page without changing your saved order.
 
 ---
 
@@ -53,14 +64,15 @@ Once installed, setting up your first pair takes just a few seconds:
 
 4. **Select Your Target Documents & SD Cards**:
    - **From Favorites or Recents**: Star your favorite folders/files or pick from recently opened directories.
-   - **From FOLDERS Section**: Browse internal storage directories or mounted **SD Cards** and tap any `.note`, `.pdf`, or `.epub` file. It will be added to your **Active Targets** list.
+   - **From FOLDERS Section**: Browse internal storage directories or mounted **SD Cards** and tap any `.note`, `.pdf`, or `.epub` file. Choose **Add Note** or **Add Document** to add the file once. It appears in **Bookmarks** with its full filename and extension.
 
-5. **Set Page Locking (Optional)**:
-   - Next to each active target document, tap **`[ Last Page ]`** to toggle it to **`[ Locked ]`**.
-   - Use the **`-5`**, **`<`**, **`>`**, **`+5`** stepper buttons to adjust the target page number (e.g. Page 5 or Page 15).
+5. **Choose Bookmarked Pages**:
+   - Tap **Edit** on a target, then choose **Lock to page** or **Use last viewed page**.
+   - Enter a page number and tap **Save changes**. Known note bounds are enforced.
+   - To add another bookmark in that file, expand **Add another page bookmark**, enter the desired page, and tap **Add page bookmark**. Existing file/page destinations cannot be duplicated.
 
 6. **Save & Start Toggling**:
-   - Tap **`Done`** (in black at top right) to save your configuration.
+   - Changes save immediately. Wait for **Saved**, then tap **Close**. If saving fails, tap the error to retry.
 
 ---
 
