@@ -26,6 +26,7 @@ import {
   currentUiPage,
   type TargetItem,
 } from './src/domain/targets';
+import {OverlaySettingsPanel} from './src/components/OverlaySettingsPanel';
 import {TargetEditor} from './src/components/TargetEditor';
 
 interface DirItem {
@@ -741,6 +742,8 @@ export default function App(): React.JSX.Element {
                 })
               )}
             </View>
+
+            <OverlaySettingsPanel />
 
             {/* Favorite Files Section */}
             {atRoot && favFiles.length > 0 && (

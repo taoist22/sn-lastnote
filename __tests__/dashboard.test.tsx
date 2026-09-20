@@ -25,6 +25,10 @@ let tree: renderer.ReactTestRenderer;
 let presets: string;
 let here: string;
 const native = {
+  getOverlaySettings: async () => ({
+    rememberPosition: false,
+    restoreOnLoad: false,
+  }),
   listRootDirectories: async () => [],
   readHere: async () => here,
   readThere: async () => '',

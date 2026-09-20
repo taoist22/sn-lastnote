@@ -2,6 +2,7 @@ package com.lastnote;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -61,10 +62,19 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     private static int           sSavedY        = 400;
 
     private final ReactApplicationContext reactContext;
+    private final SharedPreferences overlayPreferences;
 
     LastNoteModule(ReactApplicationContext context) {
         super(context);
         reactContext = context;
+        overlayPreferences = context.getSharedPreferences("lastnote_overlay_settings", Context.MODE_PRIVATE);
+        if (overlayPreferences.getBoolean("rememberPosition", false)) {
+            sSavedX = overlayPreferences.getInt("x", 80);
+            sSavedY = overlayPreferences.getInt("y", 400);
+        } else {
+            sSavedX = 80;
+            sSavedY = 400;
+        }
         reactContext.addLifecycleEventListener(this);
     }
 
@@ -83,10 +93,35 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         reactContext.removeLifecycleEventListener(this);
     }
 
+    @ReactMethod
+    public void getOverlaySettings(Promise promise) {
+        WritableMap settings = Arguments.createMap();
+        settings.putBoolean("rememberPosition", overlayPreferences.getBoolean("rememberPosition", false));
+        settings.putBoolean("restoreOnLoad", overlayPreferences.getBoolean("restoreOnLoad", false));
+        promise.resolve(settings);
+    }
+
+    @ReactMethod
+    public void setOverlaySettings(boolean rememberPosition, boolean restoreOnLoad, Promise promise) {
+        reactContext.runOnUiQueueThread(() -> {
+            SharedPreferences.Editor editor = overlayPreferences.edit()
+                    .putBoolean("rememberPosition", rememberPosition)
+                    .putBoolean("restoreOnLoad", restoreOnLoad);
+            if (rememberPosition) {
+                editor.putInt("x", sSavedX).putInt("y", sSavedY);
+            } else {
+                editor.remove("x").remove("y");
+            }
+            if (editor.commit()) promise.resolve(true);
+            else promise.reject("SETTINGS_SAVE_FAILED", "Could not save floating button settings.");
+        });
+    }
+
     // ─── Floating overlay ────────────────────────────────────────────────────
 
     @ReactMethod
     public void showOverlay(Promise promise) {
+        reactContext.runOnUiQueueThread(() -> {
         try {
             hideOverlayInternal(); // clear any ghost first
 
@@ -120,9 +155,13 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                     PixelFormat.TRANSLUCENT
             );
             params.gravity = Gravity.TOP | Gravity.START;
-            params.x = sSavedX;
-            params.y = sSavedY;
+            params.x = Math.max(0, Math.min(sSavedX, dm.widthPixels - sizePx));
+            params.y = Math.max(0, Math.min(sSavedY, dm.heightPixels - sizePx));
+            sSavedX = params.x;
+            sSavedY = params.y;
 
+            final int maxX = Math.max(0, dm.widthPixels - sizePx);
+            final int maxY = Math.max(0, dm.heightPixels - sizePx);
             btn.setOnTouchListener(new View.OnTouchListener() {
                 private int     initX, initY, initTouchX, initTouchY;
                 private boolean dragging      = false;
@@ -151,8 +190,8 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                             int dy = (int) ev.getRawY() - initTouchY;
                             if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
                                 dragging = true;
-                                params.x = initX + dx;
-                                params.y = initY + dy;
+                                params.x = Math.max(0, Math.min(initX + dx, maxX));
+                                params.y = Math.max(0, Math.min(initY + dy, maxY));
                                 if (sWindowManager != null && sFloatingView != null) {
                                     sWindowManager.updateViewLayout(sFloatingView, params);
                                 }
@@ -162,6 +201,9 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                         case MotionEvent.ACTION_UP:
                             sSavedX = params.x;
                             sSavedY = params.y;
+                            if (overlayPreferences.getBoolean("rememberPosition", false)) {
+                                overlayPreferences.edit().putInt("x", sSavedX).putInt("y", sSavedY).apply();
+                            }
                             if (!dragging) {
                                 long held = ev.getEventTime() - downEventTime;
                                 sendEvent(held >= LONG_PRESS_MS ? EVENT_LONG_PRESS : EVENT_TAP);
@@ -179,6 +221,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             Log.e(TAG, "showOverlay failed", e);
             promise.reject("OVERLAY_SHOW_FAILED", e);
         }
+        });
     }
 
     @ReactMethod

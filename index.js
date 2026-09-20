@@ -15,6 +15,7 @@ import {
   chooseToggleTarget,
   currentUiPage,
 } from './src/domain/targets';
+import {restoreOverlay} from './src/domain/overlayStartup';
 import {extractCurrentPath} from './src/domain/navigation';
 
 let toggling = false;
@@ -32,20 +33,16 @@ const lastNoteModule = NativeModules.LastNote;
 // JS-side overlay state — tracks whether icon is currently on screen
 let overlayActive = false;
 
-// On load: sync JS state with native
-if (lastNoteModule) {
-  lastNoteModule
-    .isOverlayShowing()
-    .then((showing: boolean) => {
-      if (showing) {
-        lastNoteModule.hideOverlay().catch(() => {});
-      }
-      overlayActive = false;
-    })
-    .catch(() => {
-      overlayActive = false;
-    });
-}
+// Restore only when PluginHost loads this module; this is not a boot receiver.
+const overlayReady = lastNoteModule
+  ? restoreOverlay(lastNoteModule)
+      .then(showing => {
+        overlayActive = showing;
+      })
+      .catch(error => {
+        console.warn('LastNote could not restore the floating button:', error);
+      })
+  : Promise.resolve();
 
 // ─── Toggle logic ────────────────────────────────────────────────────────────
 async function performToggle() {
@@ -152,6 +149,7 @@ PluginManager.registerButtonListener({
       return;
     }
 
+    await overlayReady;
     if (overlayActive) {
       await lastNoteModule.hideOverlay().catch(() => {});
       overlayActive = false;
