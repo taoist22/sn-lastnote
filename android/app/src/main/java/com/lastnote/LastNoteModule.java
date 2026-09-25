@@ -17,6 +17,7 @@ import android.view.WindowManager;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import androidx.core.content.ContextCompat;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -52,11 +53,18 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     private static final String EVENT_TAP        = "onFloatingToggleTap";
     private static final String EVENT_LONG_PRESS = "onFloatingLongPress";
     private static final String EVENT_PRESET     = "onPresetSelected";
+    // Send Link (test build): destination chosen, popup closed, tap placed, tap cancelled.
+    private static final String EVENT_LINK_DEST   = "onLinkDestination";
+    private static final String EVENT_LINK_CLOSED = "onLinkPopupClosed";
+    private static final String EVENT_LINK_TAP    = "onLinkTap";
+    private static final String EVENT_LINK_CANCEL = "onLinkTapCancel";
+    private static final String TEST_LOG_PATH     = "/storage/emulated/0/MyStyle/LastNote/send-link-test-log.txt";
     private static final long   LONG_PRESS_MS    = 600;
 
     // Static singleton — survives JS reloads within PluginHost process
     private static View          sFloatingView  = null;
     private static View          sPopupView     = null;
+    private static View          sTapLayer      = null;
     private static WindowManager sWindowManager = null;
     private static int           sSavedX        = 80;
     private static int           sSavedY        = 400;
@@ -89,6 +97,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
     public void onHostDestroy() {
         // Fired when plugin is toggled OFF in Supernote's plugin manager
         hidePopupInternal();
+        hideTapLayerInternal();
         hideOverlayInternal();
         reactContext.removeLifecycleEventListener(this);
     }
@@ -253,6 +262,17 @@ public class LastNoteModule extends ReactContextBaseJavaModule
 
     @ReactMethod
     public void showPresetPopup(ReadableArray items, Promise promise) {
+        showPopup(items, EVENT_PRESET, promise);
+    }
+
+    // Same popup, but choosing a bookmark reports it for linking instead of
+    // opening it, and Close is reported so the caller can stop waiting.
+    @ReactMethod
+    public void showLinkPopup(ReadableArray items, Promise promise) {
+        showPopup(items, EVENT_LINK_DEST, promise);
+    }
+
+    private void showPopup(ReadableArray items, final String eventName, Promise promise) {
         reactContext.runOnUiQueueThread(() -> {
         try {
             hidePopupInternal();
@@ -306,7 +326,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
                     @Override
                     public void onClick(View v) {
                         hidePopupInternal();
-                        sendTargetEvent(EVENT_PRESET, path, page);
+                        sendTargetEvent(eventName, path, page);
                     }
                 });
 
@@ -318,7 +338,10 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             close.setTextColor(Color.BLACK);
             close.setTextSize(17);
             close.setPadding(pPad * 2, pPad * 2, pPad * 2, pPad * 2);
-            close.setOnClickListener(v -> hidePopupInternal());
+            close.setOnClickListener(v -> {
+                hidePopupInternal();
+                if (EVENT_LINK_DEST.equals(eventName)) sendEvent(EVENT_LINK_CLOSED);
+            });
             container.addView(close, 0);
             ScrollView scroll = new ScrollView(appCtx);
             scroll.addView(container);
@@ -360,6 +383,159 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         }
     }
 
+    // ─── Send Link tap layer (test build) ────────────────────────────────────
+
+    // A full-screen transparent overlay window that takes exactly one tap, pen
+    // or finger, and reports it in screen pixels. It is a plain overlay window
+    // like the floating button, so the plugin's own view never has to reopen.
+    @ReactMethod
+    public void showTapLayer(String message, Promise promise) {
+        reactContext.runOnUiQueueThread(() -> {
+        try {
+            hideTapLayerInternal();
+            Context appCtx = reactContext.getApplicationContext();
+            if (sWindowManager == null) {
+                sWindowManager = (WindowManager) appCtx.getSystemService(Context.WINDOW_SERVICE);
+            }
+            DisplayMetrics dm = appCtx.getResources().getDisplayMetrics();
+            float density = dm.density > 0 ? dm.density : 1.5f;
+            final float slop = 20 * density;
+
+            FrameLayout root = new FrameLayout(appCtx);
+            root.setBackgroundColor(Color.TRANSPARENT);
+
+            LinearLayout bar = new LinearLayout(appCtx);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setClickable(true); // touches on the bar never count as a placement
+            GradientDrawable barBg = new GradientDrawable();
+            barBg.setColor(Color.WHITE);
+            barBg.setStroke((int) (1.5f * density), Color.BLACK);
+            bar.setBackground(barBg);
+            int pad = (int) (14 * density);
+
+            TextView text = new TextView(appCtx);
+            text.setText(message != null ? message : "Tap where the link goes");
+            text.setTextColor(Color.BLACK);
+            text.setTextSize(17);
+            text.setPadding(pad, pad, pad, pad);
+            bar.addView(text);
+
+            TextView cancel = new TextView(appCtx);
+            cancel.setText("Cancel");
+            cancel.setTextColor(Color.BLACK);
+            cancel.setTextSize(17);
+            cancel.setPadding(pad, pad, pad, pad);
+            cancel.setOnClickListener(v -> {
+                hideTapLayerInternal();
+                sendEvent(EVENT_LINK_CANCEL);
+            });
+            bar.addView(cancel);
+
+            FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+            barLp.topMargin = (int) (10 * density);
+            root.addView(bar, barLp);
+
+            root.setOnTouchListener(new View.OnTouchListener() {
+                private float downX, downY;
+                private long downTime;
+                private boolean single;
+
+                @Override
+                public boolean onTouch(View v, MotionEvent ev) {
+                    switch (ev.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            downX = ev.getRawX();
+                            downY = ev.getRawY();
+                            downTime = ev.getEventTime();
+                            single = true;
+                            return true;
+                        case MotionEvent.ACTION_POINTER_DOWN:
+                            single = false;
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            if (Math.hypot(ev.getRawX() - downX, ev.getRawY() - downY) > slop) single = false;
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                            if (single && ev.getEventTime() - downTime <= 700
+                                    && Math.hypot(ev.getRawX() - downX, ev.getRawY() - downY) <= slop) {
+                                hideTapLayerInternal();
+                                WritableMap tap = Arguments.createMap();
+                                tap.putDouble("x", ev.getRawX());
+                                tap.putDouble("y", ev.getRawY());
+                                tap.putInt("tool", ev.getToolType(0));
+                                tap.putInt("screenWidth", dm.widthPixels);
+                                tap.putInt("screenHeight", dm.heightPixels);
+                                emit(EVENT_LINK_TAP, tap);
+                            }
+                            return true;
+                        default:
+                            return true;
+                    }
+                }
+            });
+
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT);
+            params.gravity = Gravity.TOP | Gravity.START;
+            sTapLayer = root;
+            sWindowManager.addView(sTapLayer, params);
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "showTapLayer failed", e);
+            promise.reject("TAP_LAYER_FAILED", e);
+        }
+        });
+    }
+
+    @ReactMethod
+    public void hideTapLayer(Promise promise) {
+        reactContext.runOnUiQueueThread(() -> {
+            hideTapLayerInternal();
+            promise.resolve(true);
+        });
+    }
+
+    private void hideTapLayerInternal() {
+        if (sWindowManager != null && sTapLayer != null) {
+            try { sWindowManager.removeView(sTapLayer); } catch (Exception ignored) {}
+            sTapLayer = null;
+        }
+    }
+
+    // Appends to a log the user can fetch over Browse & Access. MyStyle/LastNote
+    // is where this plugin already writes its backups.
+    @ReactMethod
+    public void appendTestLog(String text, Promise promise) {
+        try {
+            File dir = new File(TEST_LOG_PATH).getParentFile();
+            if (dir != null && !dir.exists()) dir.mkdirs();
+            FileOutputStream out = new FileOutputStream(new File(TEST_LOG_PATH), true);
+            try { out.write((text != null ? text : "").getBytes(StandardCharsets.UTF_8)); out.flush(); }
+            finally { out.close(); }
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "appendTestLog failed", e);
+            promise.resolve(false);
+        }
+    }
+
+    private void emit(String name, WritableMap data) {
+        try {
+            reactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit(name, data);
+        } catch (Exception e) {
+            Log.e(TAG, "emit failed: " + name, e);
+        }
+    }
+
     private void sendEvent(String name) {
         try {
             reactContext
@@ -381,6 +557,7 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         } catch (Exception e) {
             Log.e(TAG, "sendTargetEvent failed: " + name, e);
             // Preserve navigation if JavaScript is temporarily unavailable.
+            if (!EVENT_PRESET.equals(name)) return;
             if (path != null && path.toLowerCase().endsWith(".note")) {
                 openNoteInternal(path, page);
             } else {
