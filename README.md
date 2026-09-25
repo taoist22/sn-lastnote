@@ -23,6 +23,7 @@ The next successful bookmark save writes the deduplicated list to storage.
 
 ## Key Features
 
+- **Send Link**: Lasso a few words, tap the floating button with your finger, and pick a bookmarked note page. That page opens, you tap where the link goes, and LastNote brings you back. The lassoed words become the link's label. See [Send Link](#send-link).
 - **Bookmarks Dashboard**: Manage note pairs, multi-preset document targets, and same-note page bookmarks in a single unified dashboard.
 - **Same-Note Page Switching & Bookmarks**: Set multiple page targets (e.g., Page 2 and Page 23) for the same notebook. Switch back and forth between pages in 1 tap without leaving your note.
 - **Native Open & Page Jump APIs**: Uses Supernote's supported `openFile` and `jumpToPage` APIs on current firmware, with the prior native opener retained as a compatibility fallback.
@@ -92,6 +93,57 @@ Once installed, setting up your first pair takes just a few seconds:
 - **Mode 2: Multi-Preset List (3+ Documents)**
   - Single-tapping the floating bubble opens an **Instant Native E-Ink Popup Menu** right at the icon, listing all your preset documents with their locked page badges (e.g., `ProjectNotes (p.5)`). Tap any document in the popup to jump to it in **1 tap**.
 
+With something lassoed in a note, a finger tap on the bubble sends a link instead of toggling. See [Send Link](#send-link).
+
+---
+
+## Send Link
+
+Put a link to the page you're writing on onto a page in another note, without leaving your notes. The link's label is whatever you lassoed, and tapping the link brings you back to the page it came from.
+
+### Before you start
+
+1. **Show the floating button.** Tap the **LastNote** icon on the note toolbar.
+2. **Bookmark the page you want to send links to.** Long-press the floating button with your finger to open the dashboard. Find the note under **FOLDERS**, tap it, and choose **Add Note**. It can be in any folder or on the SD card.
+3. **Fix the page.** Tap **Edit** on the new bookmark, clear **Use last viewed page**, enter the page number, and tap **Save changes**.
+
+   If you leave **Use last viewed page** on, Send Link opens whichever page of that note you last had open.
+
+### Sending a link
+
+1. **Write a short note, and lasso it.** A drawn checkbox works too.
+2. **Tap the floating button with your finger.** LastNote reads your selection and shows your note bookmarks.
+3. **Tap a bookmark with your finger.** That note opens at the bookmarked page, with a bar at the top: `Tap to place "your words" · Note.note`.
+4. **Tap where the link should go,** with the pen or your finger.
+5. LastNote places the link, saves the note, and **brings you back** to the page you were writing on.
+
+To back out, tap **Close** in the bookmark list or **Cancel** in the bar, with your finger. Waiting 30 seconds without tapping also cancels. Either way nothing is placed, and you're returned to your page.
+
+### The label
+
+- **Typed text** in the lasso is used as it is.
+- **Handwriting** is recognized and used as the label.
+- **A drawn shape** stays as its symbol, so a square becomes a `□` checkbox link.
+- **If nothing can be read,** the label is the page name, for example `Work · p.20`.
+
+### The floating button responds to your finger only
+
+The pen passes straight through the floating button, so you can write near it. Every action on it is a finger action:
+
+| With your finger… | What happens |
+|---|---|
+| Tap, with something lassoed in a note | Send Link |
+| Tap, with nothing lassoed | Switches notes, exactly as before |
+| Long-press | Opens the dashboard |
+| Drag | Moves the button |
+
+### Good to know
+
+- **Links can only be placed in notes.** PDFs and other documents don't appear in the Send Link list, because Supernote doesn't allow links to be added to them.
+- **A link remembers a page number,** not the page itself. If you insert, delete or reorder pages before the source page, the link will point at the wrong page. The same is true of Supernote's own links.
+- **To move a placed link,** lasso it and drag it, as with any link.
+- **The log.** Each Send Link records its steps in `MyStyle/LastNote/send-link-log.txt`. If something goes wrong, include that file when you report it.
+
 ---
 
 ## Floating Button Settings
@@ -154,3 +206,7 @@ After every build, run validation to verify native packages are correct:
 npm run validate:package -- --native
 ```
 This ensures `app.npk` is successfully included in the final package.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
