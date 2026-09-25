@@ -1,10 +1,19 @@
 https://github.com/user-attachments/assets/e90a9384-5f76-4e33-bf4f-92c27a041cb7
 
-# LastNote (v0.6.5)
+# LastNote (v0.7.0)
 
 LastNote is a native-backed plugin for Supernote devices. It adds a floating overlay toggle to your screen, allowing you to switch back and forth between two notes, multiple preset documents, or specific pages within the same note (e.g. Page 2 and Page 23) with 1 tap, even while working inside PDF or EPUB documents.
 
 ---
+
+## New in v0.7.0: Send Link
+
+Lasso a few words, tap the floating button with your finger, and pick a bookmarked
+note page. That page opens, you tap where the link goes, and LastNote brings you
+back. Your lassoed words (handwriting or typed text) become the link's label.
+Without a lasso, the floating button toggles exactly as before.
+
+See [Send Link](#send-link) below for setup.
 
 ## New in v0.6.5
 
