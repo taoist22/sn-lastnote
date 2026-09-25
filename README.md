@@ -9,9 +9,7 @@ LastNote is a native-backed plugin for Supernote devices. It adds a floating ove
 ## New in v0.6.5
 
 Optional floating-button settings now remember its screen position and restore it
-when LastNote loads. Initial user testing reports that this works. Restoration
-is tied to plugin loading, so opening a note or document after reboot may still
-be necessary; immediate startup at device boot is not guaranteed.
+when LastNote loads. Restoration is tied to plugin loading, so there is a slight delay before the floating icon appears.
 
 See [Floating Button Settings](#floating-button-settings) below for setup.
 
