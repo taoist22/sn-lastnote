@@ -3,6 +3,7 @@ import {PluginCommAPI, PluginNoteAPI} from 'sn-plugin-lib';
 import {buildTextLinkAt, linkLabel} from '../src/domain/linkPlacement';
 import {absolutePath, lassoIsActive, runSendLink} from '../src/services/sendLink';
 import {navigateToTarget} from '../src/services/fileNavigation';
+import {readLassoLabel} from '../src/services/lassoLabel';
 
 jest.mock('sn-plugin-lib', () => ({
   PluginCommAPI: {getCurrentFilePath: jest.fn(), getCurrentPageNum: jest.fn(), getPageDisplaySize: jest.fn(), getLassoRect: jest.fn(), setLassoBoxState: jest.fn()},
@@ -15,6 +16,7 @@ jest.mock('../src/pluginPermissions', () => ({
   ensureFileWritePermission: jest.fn().mockResolvedValue(true),
 }));
 jest.mock('../src/services/fileNavigation', () => ({navigateToTarget: jest.fn()}));
+jest.mock('../src/services/lassoLabel', () => ({readLassoLabel: jest.fn()}));
 
 const ok = (result: unknown) => ({success: true, result});
 const mock = (fn: unknown) => fn as jest.Mock;
@@ -50,6 +52,7 @@ beforeEach(() => {
   mock(PluginCommAPI.setLassoBoxState).mockResolvedValue(ok(true));
   mock(PluginNoteAPI.saveCurrentNote).mockResolvedValue(ok(true));
   mock(PluginNoteAPI.insertTextLink).mockResolvedValue(ok(0));
+  mock(readLassoLabel).mockResolvedValue({text: '', via: 'none'});
   mock(navigateToTarget).mockImplementation(async (t: {path: string; page: number}) => {location = {path: t.path, page: t.page - 1};});
   module.readPresets.mockResolvedValue(JSON.stringify([
     {name: 'Board', path: BOARD, page: 1}, {name: 'Paper', path: '/storage/emulated/0/Document/a.pdf', page: 3},
@@ -60,7 +63,7 @@ beforeEach(() => {
 
 it('opens a bookmark in another notebook, places a link back at the tap, and returns', async () => {
   await runSendLink();
-  expect(PluginCommAPI.setLassoBoxState).toHaveBeenCalledWith(2);
+  expect(readLassoLabel).toHaveBeenCalledTimes(1);
   expect(module.showLinkPopup).toHaveBeenCalledWith([{name: 'Board', path: BOARD, page: 1, label: null}]);
   expect(module.showTapLayer).toHaveBeenCalledWith(expect.stringContaining('Board.note'), 30000);
   expect(PluginNoteAPI.insertTextLink).toHaveBeenCalledWith(expect.objectContaining({
@@ -70,6 +73,15 @@ it('opens a bookmark in another notebook, places a link back at the tap, and ret
   expect(location).toEqual({path: SOURCE, page: 19});
   expect(log).toContain('native build 2');
   expect(log).toContain('summary: Link placed');
+});
+
+it('uses the lassoed handwriting as the label, and logs before reading it', async () => {
+  mock(readLassoLabel).mockResolvedValue({text: 'Call the plumber', via: 'handwriting'});
+  await runSendLink();
+  expect(module.showTapLayer).toHaveBeenCalledWith('Tap to place “Call the plumber” · Board.note', 30000);
+  expect(PluginNoteAPI.insertTextLink).toHaveBeenCalledWith(expect.objectContaining({fullText: 'Call the plumber', destPage: 19}));
+  expect(module.appendTestLog.mock.calls[0][0]).toContain('reading the selection');
+  expect(log).toContain('via handwriting');
 });
 
 it('waits with the native timer, never a JS timer, after leaving the note', async () => {

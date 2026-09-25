@@ -4,9 +4,11 @@ import {buildTextLinkAt, linkLabel, LinkSource, PageSize} from '../domain/linkPl
 import {readTargets, TargetItem} from '../domain/targets';
 import {ensureFileReadPermission, ensureFileWritePermission} from '../pluginPermissions';
 import {navigateToTarget} from './fileNavigation';
+import {readLassoLabel} from './lassoLabel';
 
 // Send Link: lasso a note, tap the floating button, pick a bookmarked notebook
-// page. That page opens, the user taps where the link goes, the link is placed
+// page. The selection becomes the link's label (typed text, else handwriting,
+// else the page name). That page opens, the user taps where the link goes, the link is placed
 // and LastNote returns to the source page. Every run appends its steps to
 // MyStyle/LastNote/send-link-log.txt.
 //
@@ -102,6 +104,8 @@ export async function runSendLink(): Promise<void> {
   const started = Date.now();
   const lines: string[] = [];
   const log = (line: string) => {lines.push(`${String(Date.now() - started).padStart(6)}ms  ${line}`);};
+  // Written ahead of risky calls, so a freeze still leaves the steps behind.
+  const flush = () => module.appendTestLog(lines.splice(0).map(line => line + '\n').join('')).catch(() => {});
   let summary = 'Send Link stopped';
   let source: LinkSource | null = null;
   try {
@@ -119,9 +123,11 @@ export async function runSendLink(): Promise<void> {
     log(`notebook bookmarks: ${targets.length}`);
     if (!targets.length) {summary = 'Send Link: bookmark a notebook page in LastNote first'; log(summary); return;}
 
-    // Clear the selection so it is not left hanging over the source page.
-    const cleared = await settleWithin(PluginCommAPI.setLassoBoxState(2), CALL_WAIT_MS);
-    log(`lasso cleared: ${JSON.stringify(cleared)}`);
+    log('reading the selection');
+    await flush();
+    const read = await readLassoLabel(wait, log);
+    const label = read.text || linkLabel(source);
+    log(`label ${JSON.stringify(label)} via ${read.via}`);
 
     const picked = nextEvent(['onLinkDestination', 'onLinkPopupClosed'], POPUP_WAIT_MS);
     await module.showLinkPopup(targets.map(t => ({name: t.name, path: t.path, page: t.page, label: t.label ?? null})));
@@ -142,7 +148,7 @@ export async function runSendLink(): Promise<void> {
     if (!(await arrive(dest.path, dest.page > 0 ? dest.page - 1 : null, log))) {summary = 'Send Link: the bookmark did not open'; return;}
 
     const tapped = nextEvent(['onLinkTap', 'onLinkTapCancel'], TAP_WAIT_MS + 5000);
-    await module.showTapLayer(`Tap where the link goes · ${dest.path.split('/').pop()}`, TAP_WAIT_MS);
+    await module.showTapLayer(`Tap to place “${label}” · ${dest.path.split('/').pop()}`, TAP_WAIT_MS);
     log('tap layer shown');
     const tap = await tapped;
     await module.hideTapLayer().catch(() => {});
@@ -158,7 +164,7 @@ export async function runSendLink(): Promise<void> {
     let size = value<PageSize>(await PluginCommAPI.getPageDisplaySize().catch(() => null));
     if (!size) {size = value<PageSize>(await PluginFileAPI.getPageSize(here.path, here.pageIndex).catch(() => null));}
     log(`page size ${JSON.stringify(size)}`);
-    const link = buildTextLinkAt(source, linkLabel(source), size || {width: 0, height: 0}, {x: tap.data.x, y: tap.data.y});
+    const link = buildTextLinkAt(source, label, size || {width: 0, height: 0}, {x: tap.data.x, y: tap.data.y});
     log(`insertTextLink ${JSON.stringify(link.rect)} -> ${link.destPath} p.${link.destPage + 1}`);
     const outcome = await settleWithin(PluginNoteAPI.insertTextLink(link), CALL_WAIT_MS);
     log(outcome.done ? `insert replied ${JSON.stringify(outcome.value)}` : `insert: NO REPLY within ${CALL_WAIT_MS}ms`);
@@ -190,7 +196,8 @@ export async function runSendLink(): Promise<void> {
       summary += ' · could not return';
     }
     log(`summary: ${summary}`);
-    await module.appendTestLog(lines.join('\n') + '\n\n').catch(() => {});
+    log('');
+    await flush();
     try {ToastAndroid.show(summary, ToastAndroid.LONG);} catch {}
     running = false;
   }
