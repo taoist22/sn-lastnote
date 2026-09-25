@@ -14,6 +14,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import androidx.core.content.ContextCompat;
@@ -43,28 +45,38 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class LastNoteModule extends ReactContextBaseJavaModule
         implements LifecycleEventListener {
 
     private static final String TAG              = "LastNoteModule";
+    // Bump on every native change; the Send Link log prints it first, so a
+    // stale native package is visible instead of looking like a failed fix.
+    private static final int    NATIVE_BUILD     = 2;
     private static final String FILE_HERE        = "ln_here.txt";
     private static final String FILE_THERE       = "ln_there.txt";
     private static final String EVENT_TAP        = "onFloatingToggleTap";
     private static final String EVENT_LONG_PRESS = "onFloatingLongPress";
     private static final String EVENT_PRESET     = "onPresetSelected";
-    // Send Link (test build): destination chosen, popup closed, tap placed, tap cancelled.
+    // Send Link: destination chosen, popup closed, tap placed, tap cancelled.
     private static final String EVENT_LINK_DEST   = "onLinkDestination";
     private static final String EVENT_LINK_CLOSED = "onLinkPopupClosed";
     private static final String EVENT_LINK_TAP    = "onLinkTap";
     private static final String EVENT_LINK_CANCEL = "onLinkTapCancel";
-    private static final String TEST_LOG_PATH     = "/storage/emulated/0/MyStyle/LastNote/send-link-test-log.txt";
+    private static final String TEST_LOG_PATH     = "/storage/emulated/0/MyStyle/LastNote/send-link-log.txt";
     private static final long   LONG_PRESS_MS    = 600;
 
     // Static singleton — survives JS reloads within PluginHost process
     private static View          sFloatingView  = null;
     private static View          sPopupView     = null;
     private static View          sTapLayer      = null;
+    // JS timers stop once another note opens, so every wait that spans a note
+    // switch runs here instead.
+    private static final ScheduledExecutorService sTimer = Executors.newSingleThreadScheduledExecutor();
+    private static final Handler sMain = new Handler(Looper.getMainLooper());
     private static WindowManager sWindowManager = null;
     private static int           sSavedX        = 80;
     private static int           sSavedY        = 400;
@@ -383,13 +395,23 @@ public class LastNoteModule extends ReactContextBaseJavaModule
         }
     }
 
-    // ─── Send Link tap layer (test build) ────────────────────────────────────
+    // ─── Send Link ───────────────────────────────────────────────────────────
+
+    @ReactMethod
+    public void getNativeBuild(Promise promise) {
+        promise.resolve(NATIVE_BUILD);
+    }
+
+    @ReactMethod
+    public void delay(double ms, Promise promise) {
+        sTimer.schedule(() -> promise.resolve(null), Math.max(0, (long) ms), TimeUnit.MILLISECONDS);
+    }
 
     // A full-screen transparent overlay window that takes exactly one tap, pen
     // or finger, and reports it in screen pixels. It is a plain overlay window
     // like the floating button, so the plugin's own view never has to reopen.
     @ReactMethod
-    public void showTapLayer(String message, Promise promise) {
+    public void showTapLayer(String message, double timeoutMs, Promise promise) {
         reactContext.runOnUiQueueThread(() -> {
         try {
             hideTapLayerInternal();
@@ -427,7 +449,9 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             cancel.setPadding(pad, pad, pad, pad);
             cancel.setOnClickListener(v -> {
                 hideTapLayerInternal();
-                sendEvent(EVENT_LINK_CANCEL);
+                WritableMap reason = Arguments.createMap();
+                reason.putString("reason", "cancel");
+                emit(EVENT_LINK_CANCEL, reason);
             });
             bar.addView(cancel);
 
@@ -486,6 +510,16 @@ public class LastNoteModule extends ReactContextBaseJavaModule
             params.gravity = Gravity.TOP | Gravity.START;
             sTapLayer = root;
             sWindowManager.addView(sTapLayer, params);
+            // The layer times itself out, so nothing depends on a JS timer.
+            final View shown = root;
+            sMain.postDelayed(() -> {
+                if (sTapLayer == shown) {
+                    hideTapLayerInternal();
+                    WritableMap reason = Arguments.createMap();
+                    reason.putString("reason", "timeout");
+                    emit(EVENT_LINK_CANCEL, reason);
+                }
+            }, Math.max(1000, (long) timeoutMs));
             promise.resolve(true);
         } catch (Exception e) {
             Log.e(TAG, "showTapLayer failed", e);

@@ -17,15 +17,13 @@ import {
 } from './src/domain/targets';
 import {restoreOverlay} from './src/domain/overlayStartup';
 import {extractCurrentPath} from './src/domain/navigation';
-import {runSendLinkTest} from './src/services/sendLinkTest';
+import {lassoIsActive, runSendLink} from './src/services/sendLink';
 
 let toggling = false;
 let lastTarget;
 
 const BUTTON_TYPE_TOOLBAR = 1;
 const BUTTON_TOGGLE_ID = 100;
-// TEST BUILD ONLY: runs the Send Link round trip from the note toolbar.
-const BUTTON_LINK_TEST_ID = 101;
 const SHOW_TYPE_BACKGROUND = 0;
 
 AppRegistry.registerComponent(appName, () => App);
@@ -92,7 +90,16 @@ async function performToggle() {
 
 // ─── Module-scope event listeners ────────────────────────────────────────────
 
-DeviceEventEmitter.addListener('onFloatingToggleTap', () => {
+// With something lassoed in a notebook, the tap sends a link to a bookmarked
+// page instead of toggling. Without a lasso it toggles exactly as before.
+DeviceEventEmitter.addListener('onFloatingToggleTap', async () => {
+  if (toggling) {
+    return;
+  }
+  if (await lassoIsActive()) {
+    runSendLink();
+    return;
+  }
   performToggle();
 });
 
@@ -143,19 +150,8 @@ PluginManager.registerButton(BUTTON_TYPE_TOOLBAR, ['NOTE', 'DOC'], {
   showType: SHOW_TYPE_BACKGROUND,
 });
 
-PluginManager.registerButton(BUTTON_TYPE_TOOLBAR, ['NOTE'], {
-  id: BUTTON_LINK_TEST_ID,
-  name: 'Send Link (test)',
-  icon: Image.resolveAssetSource(require('./assets/two-arrows.png')).uri,
-  showType: SHOW_TYPE_BACKGROUND,
-});
-
 PluginManager.registerButtonListener({
   async onButtonPress(event) {
-    if (event?.id === BUTTON_LINK_TEST_ID) {
-      runSendLinkTest();
-      return;
-    }
     if (!event || event.id !== BUTTON_TOGGLE_ID) {
       return;
     }
